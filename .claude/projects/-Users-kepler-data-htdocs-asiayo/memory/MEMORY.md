@@ -1,2 +1,0 @@
-- [kubectl 破壞性操作必須確認](feedback_kubectl_confirm.md) — delete/apply/replace 等操作前必須先確認
-- [Skill 載入不可遺漏](feedback_skill_loading.md) — 藍圖前必須完整載入所有相關 Skill，不可漏掉
