@@ -101,15 +101,29 @@ backend/go/                      # ← 後端根目錄 (所有 Go 指令都在�
         - **禁止反過來**（先開 Transaction 再取 Lock）：會佔用 DB 連線等待鎖、取鎖失敗需無謂 rollback、有死鎖風險。
 4.  **介面層 (Interface Layer)**：在 `internal/interfaces/api` 中建立處理器 (Handlers) 與路由 (Routes)。
     -   *規則*：解析請求，調用應用服務，並使用 `pkg/response` 格式化回應。
-5.  **文檔 (Documentation)**：立即為處理器添加 Swagger 註釋。
+5.  **文檔 (Documentation)**：立即為處理器添加 Swagger 註釋，並完成 **end-to-end 接線**。
     -   **完整規範請讀取 [SWAGGER.md](references/SWAGGER.md)**：包含 Handler 註釋規範、`@Param` 語法、`@Success` 型別規範、完整範例、Request struct `example` tag 規則。
     -   在新增或修改任何 Handler 端點前，**必須**先讀取 `references/SWAGGER.md` 並遵循其中所有規則。
     -   **生成指令**：`cd backend/go && make swagger`（修改後必須重新執行）
+    -   ⚠️ **僅寫註釋不算完成**。首次打底或新增 Swagger 時，必須完整執行下列 **驗收清單**：
+        1.  依賴：`go get github.com/swaggo/gin-swagger github.com/swaggo/files`，並 **對齊版本** `go get github.com/swaggo/swag@latest`（必須與 `swag` CLI 版本一致，否則 `docs.go` 會產出當前 lib 不支援的欄位）。
+        2.  產生文件：`make swagger`（成功後 `docs/docs.go`、`docs/swagger.json`、`docs/swagger.yaml` 三個檔案都存在）。
+        3.  路由註冊：router 掛上 `GET /swagger/*any`，用 `ginSwagger.WrapHandler(swaggerFiles.Handler)`。
+        4.  Blank import：在 router 或 main.go `import _ "<module>/docs"`，觸發 docs 註冊，**遺漏會 404**。
+        5.  開關旗標：使用獨立的 `SWAGGER_ENABLED` 環境變數控制暴露，**不要**與 `SERVER_MODE` 綁死——部署時可能 release 模式仍想暴露內網文件。
+        6.  `.gitignore`：`docs/docs.go` / `docs/swagger.json` / `docs/swagger.yaml` 為產出物，加入 ignore。
+        7.  **啟動驗證**：打底完成前執行 `make smoke`（見下方測試規範），確保 `/swagger/doc.json` 回 200。沒驗過等於沒做。
 6.  **測試 (Testing)**：每次完成應用層 (Application Layer) 的實作後，**必須**執行單元測試並確認全部通過，再回報完成。
     -   執行指令：`cd backend/go && make test`
     -   若有測試失敗，優先修正 Service 邏輯或測試案例，不可略過。
     -   新增 Service 方法時，同步在對應的 `*_service_test.go` 補充測試案例。
     -   涉及 Redis 的測試使用 `miniredis/v2` 作為 in-memory 替代。
+
+7.  **Smoke 驗證 (End-to-End Verification)**：**首次打底**或**新增關鍵功能（Swagger/Health）** 後，必須執行 `make smoke`，實際啟動 server 並 curl 驗證：
+    -   `GET /health` 回 200
+    -   `GET /swagger/doc.json` 回 200（若有開啟）
+    -   僅 `go build` + `go test` **不算完成**——編譯通過不等於啟動能跑，單元測試不等於 handler wiring 正確。
+    -   Tech Lead 工作流規定：scaffolding 完成前若未跑 smoke，**視為未完成**。
 
 
 ## 編碼規則 (Coding Rules)
