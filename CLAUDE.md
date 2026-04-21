@@ -1,79 +1,102 @@
-# Stash — 記帳 App
+# Stash — 記帳 App（Monorepo）
 
-記帳 app，名稱為 **Stash**。後端聚合台股 / 美股 / 日股 / 虛擬貨幣 的免費行情來源，提供統一 API 給 app 使用。
+個人記帳 app，iOS 端 + Go 後端 monorepo。**核心原則：API 只提供價格，使用者資料全部在手機內。**
 
-## 目錄結構
+## 倉庫分佈
+
+| 路徑 | 角色 | 獨立 GitHub |
+|------|------|------|
+| `backend/go/` | Go + Gin 後端，聚合多家免費行情 API | `github.com/KeplerJhih/stash_go` (dev) |
+| `native/ios/stash/` | SwiftUI iOS App | `github.com/KeplerJhih/stash_ios` (dev) |
+| `devops/docker/` | 本機 infra（Postgres 18 + Redis 8） | — |
+| `.claude/` | Skills / commands / hooks（獨立 git） | — |
+
+`backend/go/` 與 `native/ios/stash/` 各自推送至獨立 repo 的 `dev` 分支。同步方式見各子專案的 CLAUDE.md。
+
+## 整體架構
 
 ```
-stash/
-├── backend/go/                     # Go 後端（DDD 架構）
-│   ├── cmd/
-│   │   ├── server/main.go          # API server 入口（含 graceful shutdown）
-│   │   └── cli/main.go             # 管理 CLI（cobra: migrate、create-admin）
-│   ├── internal/
-│   │   ├── domain/                 # Entity + Repository interfaces（零外部依賴）
-│   │   │   ├── entity/             # User、Quote、Market
-│   │   │   └── repository/         # UserRepository、PriceProvider interface
-│   │   ├── application/service/    # AuthService、QuoteService（業務邏輯 + 測試）
-│   │   ├── infrastructure/
-│   │   │   ├── config/             # viper 讀取 .env
-│   │   │   ├── persistence/        # GORM 實作（PostgreSQL）
-│   │   │   ├── provider/           # 可切換數據源的核心
-│   │   │   │   ├── registry.go     # Provider 註冊中心
-│   │   │   │   ├── router.go       # Market → provider 鏈（含 fallback）
-│   │   │   │   ├── twse/           # 台股
-│   │   │   │   ├── yahoo/          # US / TW / JP
-│   │   │   │   ├── stooq/          # US / JP
-│   │   │   │   ├── coingecko/      # CRYPTO
-│   │   │   │   └── binance/        # CRYPTO
-│   │   │   └── redis/              # go-redis v9（cache / lock / queue）
-│   │   ├── interfaces/api/         # handler / middleware / router
-│   │   └── mocks/                  # testify mock
-│   ├── pkg/                        # 可共用工具：logger / errors / response / httpclient / auth(JWT)
-│   ├── .env.example
-│   ├── Makefile                    # build / run / dev / test / migrate / create-admin / swagger
-│   └── go.mod
-│
-├── devops/docker/                  # 基礎設施（env 獨立於後端）
-│   ├── docker-compose.yml          # Postgres 18 + Redis 8
-│   ├── .env / .env.example         # infra 專屬設定
-│   └── README.md
-│
-└── .claude/                        # skills / commands / hooks
+  iOS App ──────────► Backend ─────► 免費 Provider 鏈
+ (SwiftUI)              (Gin)        (TWSE / Yahoo / CoinGecko …)
+     │                    │
+     │ 本地           ┌───┴────┐
+     │ 儲存           │ Redis  │ (cache)
+     ▼                │ Postgres│ (持久化報價 + User/Device)
+ Documents/           └────────┘
+  ledger.json
+  history.json
 ```
 
-## 架構重點
+**職責劃分**：
+- **後端**：行情聚合（validation + 關盤短路 + 三層讀取）、匿名 device session 認證、匯率
+- **iOS**：所有使用者資料（holdings / lots / history / settings）一律本地 JSON + Keychain
 
-- **DDD 分層**：`domain` → `application` → `infrastructure` → `interfaces`，依賴單向往內。
-- **可切換數據源**：`PriceProvider` interface + `Registry` + `Router`。
-  - 新增一家免費平台：實作 interface → 註冊到 registry → 改 `.env` 即可。
-  - 路由配置：`MARKET_TW_PROVIDERS=twse,yahoo`（第一個為 primary，其餘為 fallback）。
-- **快取**：Redis Cache-Aside，報價預設 TTL 30s，避免打爆免費 API。
-- **認證**：JWT 無狀態（`pkg/auth` + `middleware/auth.go`）。
-- **PostgreSQL**：GORM，透過 `cmd/cli migrate` 跑 AutoMigrate。
+## 核心特性（功能總覽）
 
-## 端點
+### 後端（backend/go）
+- DDD 四層：`domain` → `application` → `infrastructure` → `interfaces`
+- **匿名 device session**：`POST /auth/device` 冪等，同 device_id 永遠對應同 user（無密碼）
+- **報價三層**：Cache → DB(fresh) → Provider（primary+fallback，逐 symbol 補齊）
+- **報價驗證**：price≤0 / NaN 不寫 Cache / DB，自動 fallback 下一家
+- **關盤短路**：非 CRYPTO 市場關盤時，有 DB 紀錄就直接回，不打 Provider
+- Symbol 搜尋 / FX 匯率（OpenERAPI）
+- `DB_AUTO_MIGRATE` 開機自動 migrate
+- Swagger end-to-end（/swagger/*）
+
+### iOS（native/ios/stash）
+- **Lot-based 持倉**：同 symbol 可多批購入，點持倉進 lots 明細
+- **資產震幅（Asset Range）**：依期間顯示最高/最低 + 購買 timeline
+- **成長指標**：OverviewHero 可切 1D/7D/30D/90D/1Y/ALL，每分類 Δ%
+- **隱私模式**：只遮總額（淨值/分類/組小計），個別品項不遮
+- **數字顯示設定**：Full / Compact × 小數位 0–4
+- **下拉刷新節流**：可設 5s / 1min / 5min / 10min（iOS + backend 雙層 cache）
+- **資料備份**：JSON / CSV 匯出 + Import + iCloud Drive 提示（Tier 1）
+- **設定頁補完**：Categories 隱藏子分類 / About / Local vault 詳情
+
+## 端點速覽
 
 | Method | Path | 認證 |
 |--------|------|-----|
 | GET  | `/health` | ❌ |
-| POST | `/api/v1/auth/register` | ❌ |
-| POST | `/api/v1/auth/login` | ❌ |
+| POST | `/api/v1/auth/device` | ❌ |
+| POST | `/api/v1/auth/register` / `/login` | ❌ |
+| POST | `/api/v1/auth/upgrade`（匿名 → 實名） | ✅ |
 | GET  | `/api/v1/markets` | ❌ |
-| GET  | `/api/v1/quotes?market=TW&symbol=2330` | ✅ |
-| GET  | `/api/v1/quotes/batch?market=US&symbols=AAPL,TSLA` | ✅ |
+| GET  | `/api/v1/quotes` / `/quotes/batch` | ✅ |
+| GET  | `/api/v1/symbols` / `/fx/rates` | ✅ |
+| GET  | `/swagger/*any`（debug） | ❌ |
 
 ## 啟動流程
 
 ```bash
-# 1. 啟 infra（Postgres + Redis）
+# 1. Infra
 cd devops/docker && cp .env.example .env && docker compose up -d
 
-# 2. 啟後端
+# 2. Backend
 cd backend/go && cp .env.example .env
-make tidy && make migrate && make dev
+make tidy && make dev    # AutoMigrate 啟動時自動跑
+
+# 3. iOS
+open native/ios/stash/stash.xcodeproj
+# AppConfig.apiBaseURL DEBUG 指向 https://stash.keplerxu.com
 ```
 
-## 技術棧
+## 部署現況
 
-Go 1.25 + Gin + GORM + PostgreSQL 18 + go-redis v9 + Redis 8 + JWT + viper + cobra + swag + testify + miniredis
+- **Backend**：Docker image `keplerjhih/stash_go:uat`，部署到 `stash.keplerxu.com`
+- **Compose log rotation**：10MB × 10 檔（上限 ~100MB）
+- **DB_AUTO_MIGRATE=true**：新 DB 部署時 server 自動建表
+
+## 開發規範（skill）
+
+- `/doit` 指令走 Tech Lead workflow
+- 相關 skill：`backend-go`（DDD 規範、SWAGGER/LOGGING/REDIS references）、`frontend`（iOS / React 通用 RWD）、`qa`、`devops`、`deploy-remote`
+- 測試指令：backend `make test` / iOS `xcodebuild` + `swift scripts/test_logic.swift`
+
+## 其他備忘
+
+- Compose env 跟 backend env **嚴格分離**（`devops/docker/.env` vs `backend/go/.env`）
+- `.gitignore` 含 `.env copy` / `.env 2` 等 Finder 複製防呆規則
+- 根目錄與 `.claude/` 為獨立 git repo（flatten 過 nested `.git`）
+
+**詳細子專案資訊見 `backend/go/CLAUDE.md` 與 `native/ios/stash/CLAUDE.md`。**
