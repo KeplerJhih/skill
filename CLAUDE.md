@@ -49,8 +49,14 @@
 - **成長指標**：OverviewHero 可切 1D/7D/30D/90D/1Y/ALL，每分類 Δ%
 - **隱私模式**：只遮總額（淨值/分類/組小計），個別品項不遮
 - **數字顯示設定**：Full / Compact × 小數位 0–4
+- **字體縮放**：small/normal/large/xlarge（×0.9 ~ ×1.3）長者友善
 - **下拉刷新節流**：可設 5s / 1min / 5min / 10min（iOS + backend 雙層 cache）
-- **資料備份**：JSON / CSV 匯出 + Import + iCloud Drive 提示（Tier 1）
+- **報價時間戳**：API 的 `fetched_at` 流向 UI（cache 命中會顯示原始抓取時間，非「剛剛」）
+- **5 語系**：zh / zhCN / en / ja / fr，in-memory 字典
+- **標籤系統**：兩層 tag（Holding + Lot 都可打）、TagDetailView 含「鎖定計入」per-tag toggle
+- **鎖定不計入**：兩層（整 Holding / 單一 Lot），右滑鎖、LockedView 列出
+- **介面模式**：簡約（sheet 設計）vs 經典（iOS 26 Liquid Glass TabView）— 同頁設定 tab 順序與開關
+- **資料備份**：JSON v2 (含 tags) / CSV 匯出 + Import + iCloud Drive 提示（Tier 1）
 - **設定頁補完**：Categories 隱藏子分類 / About / Local vault 詳情
 
 ## 端點速覽
