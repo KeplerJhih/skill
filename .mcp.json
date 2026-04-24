@@ -43,6 +43,14 @@
     "awslabs.eks": {
       "command": "uvx",
       "args": ["awslabs.eks-mcp-server@latest"]
+    },
+    "ios-simulator": {
+      "command": "npx",
+      "args": ["-y", "ios-simulator-mcp"]
+    },
+    "xcodebuildmcp": {
+      "command": "npx",
+      "args": ["-y", "xcodebuildmcp@latest", "mcp"]
     }
   }
 }
