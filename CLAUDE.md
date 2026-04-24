@@ -106,3 +106,20 @@ open native/ios/stash/stash.xcodeproj
 - 根目錄與 `.claude/` 為獨立 git repo（flatten 過 nested `.git`）
 
 **詳細子專案資訊見 `backend/go/CLAUDE.md` 與 `native/ios/stash/CLAUDE.md`。**
+
+## CLAUDE.md 維護方針
+
+每個子專案各自有 CLAUDE.md，作為新對話開啟時最快補齊上下文的索引。當你做了**任何子專案的重大變更**（新增功能 / 改架構 / 踩過值得記的坑），請順手更新對應的 CLAUDE.md：
+
+| 變更範圍 | 要更新的 CLAUDE.md |
+|---------|-----------------|
+| 純後端（service / provider / handler / DB） | `backend/go/CLAUDE.md` |
+| 純 iOS（domain / store / view / i18n） | `native/ios/stash/CLAUDE.md` |
+| 純官網 / landing | `frontend/landing/CLAUDE.md` |
+| 跨專案的功能總覽 / 端點 / 部署 | 本檔（`.claude/CLAUDE.md`） |
+| `.claude/skills/` 規範變更 | 對應 skill 的 SKILL.md（不是 CLAUDE.md）|
+
+**準則**：
+- CLAUDE.md 是**索引 + 踩坑紀錄**，不是 changelog（commit message 才是）
+- 寫法：列出**為什麼**這樣設計、**碰過什麼坑**、**新檔案放哪裡**，不要列出每個 commit 的細節
+- 新增段落寧短勿長 — 單一段落 ≤ 200 字。長篇 reference（例如 SWAGGER 規範）放 `.claude/skills/*/references/`
