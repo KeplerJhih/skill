@@ -1,4 +1,4 @@
-# Stash — 記帳 App（Monorepo）
+# Orua — 記帳 App（Monorepo）
 
 個人記帳 app，iOS 端 + Go 後端 monorepo。**核心原則：API 只提供價格，使用者資料全部在手機內。**
 
@@ -6,12 +6,12 @@
 
 | 路徑 | 角色 | 獨立 GitHub |
 |------|------|------|
-| `backend/go/` | Go + Gin 後端，聚合多家免費行情 API | `github.com/KeplerJhih/stash_go` (dev) |
-| `native/ios/stash/` | SwiftUI iOS App | `github.com/KeplerJhih/stash_ios` (dev) |
+| `backend/go/` | Go + Gin 後端，聚合多家免費行情 API | `github.com/KeplerJhih/orua_go` (dev) |
+| `native/ios/orua/` | SwiftUI iOS App | `github.com/KeplerJhih/orua_ios` (dev) |
 | `devops/docker/` | 本機 infra（Postgres 18 + Redis 8） | — |
 | `.claude/` | Skills / commands / hooks（獨立 git） | — |
 
-`backend/go/` 與 `native/ios/stash/` 各自推送至獨立 repo 的 `dev` 分支。同步方式見各子專案的 CLAUDE.md。
+`backend/go/` 與 `native/ios/orua/` 各自推送至獨立 repo 的 `dev` 分支。同步方式見各子專案的 CLAUDE.md。
 
 ## 整體架構
 
@@ -43,7 +43,7 @@
 - `DB_AUTO_MIGRATE` 開機自動 migrate
 - Swagger end-to-end（/swagger/*）
 
-### iOS（native/ios/stash）
+### iOS（native/ios/orua）
 - **Lot-based 持倉**：同 symbol 可多批購入，點持倉進 lots 明細
 - **資產震幅（Asset Range）**：依期間顯示最高/最低 + 購買 timeline
 - **成長指標**：OverviewHero 可切 1D/7D/30D/90D/1Y/ALL，每分類 Δ%
@@ -83,13 +83,13 @@ cd backend/go && cp .env.example .env
 make tidy && make dev    # AutoMigrate 啟動時自動跑
 
 # 3. iOS
-open native/ios/stash/stash.xcodeproj
-# AppConfig.apiBaseURL DEBUG 指向 https://stash.keplerxu.com
+open native/ios/orua/orua.xcodeproj
+# AppConfig.apiBaseURL DEBUG 指向 https://api.orua.app
 ```
 
 ## 部署現況
 
-- **Backend**：Docker image `keplerjhih/stash_go:uat`，部署到 `stash.keplerxu.com`
+- **Backend**：Docker image `keplerjhih/orua_go:uat`，部署到 `api.orua.app`
 - **Compose log rotation**：10MB × 10 檔（上限 ~100MB）
 - **DB_AUTO_MIGRATE=true**：新 DB 部署時 server 自動建表
 
@@ -105,7 +105,17 @@ open native/ios/stash/stash.xcodeproj
 - `.gitignore` 含 `.env copy` / `.env 2` 等 Finder 複製防呆規則
 - 根目錄與 `.claude/` 為獨立 git repo（flatten 過 nested `.git`）
 
-**詳細子專案資訊見 `backend/go/CLAUDE.md` 與 `native/ios/stash/CLAUDE.md`。**
+**詳細子專案資訊見 `backend/go/CLAUDE.md` 與 `native/ios/orua/CLAUDE.md`。**
+
+## 多幣別 Cost Basis（2026-04 P1）
+
+**iOS 端**：`Lot` 加 `costCurrencyCode/costFXRate` 兩 optional 欄位，封存購買當下「源幣別 → baseCurrency」匯率。AddHoldingSheet cost 欄位加幣別 chip + 即時換算預覽 + sub-aware 量級警示。CurrencyCatalog 擴至 18 種（+ GBP/KRW/SGD/AUD/CAD/CHF/INR/THB/IDR + USDT/USDC）。FXRates 加穩定幣 alias（USDT/USDC/DAI/BUSD → USD pegged）。已驗證 v1/v2/v3 老資料完全相容。
+
+**後端**：新增 `MarketHK` 港股市場（5 檔同步），iOS 端對應加 `QuoteMarket.HK` + `InvestmentSub.stock.allowedMarkets` 加 .HK，nativeCurrencyCode 對 .HK 回 HKD。Yahoo provider 走 `0700.HK` 格式，自動補零至 4 碼。
+
+**支援場景**：日圓買美股 / 台幣買 BTC / USDT 買 SOL / 港股 / 韓元/英鎊/新加坡幣等使用者本國幣記帳。
+
+詳見 `backend/go/CLAUDE.md` 的「HK market」段與 `native/ios/orua/CLAUDE.md` 的「多幣別 Cost Basis」段。
 
 ## CLAUDE.md 維護方針
 
@@ -114,7 +124,7 @@ open native/ios/stash/stash.xcodeproj
 | 變更範圍 | 要更新的 CLAUDE.md |
 |---------|-----------------|
 | 純後端（service / provider / handler / DB） | `backend/go/CLAUDE.md` |
-| 純 iOS（domain / store / view / i18n） | `native/ios/stash/CLAUDE.md` |
+| 純 iOS（domain / store / view / i18n） | `native/ios/orua/CLAUDE.md` |
 | 純官網 / landing | `frontend/landing/CLAUDE.md` |
 | 跨專案的功能總覽 / 端點 / 部署 | 本檔（`.claude/CLAUDE.md`） |
 | `.claude/skills/` 規範變更 | 對應 skill 的 SKILL.md（不是 CLAUDE.md）|
