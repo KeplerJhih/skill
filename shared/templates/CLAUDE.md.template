@@ -1,0 +1,80 @@
+# {PROJECT_NAME}
+
+> 本檔案是**專案地圖**，供 /doit /team 與 Claude Code 理解整體結構。
+> 子專案的詳細規範請見對應子目錄的 CLAUDE.md。
+
+---
+
+## 🗺️ 子專案地圖
+
+| 目錄 | 說明 | 主要技術 | 子 CLAUDE.md | 對應 Skill 關鍵字 |
+|------|------|---------|--------------|------------------|
+| `backend/go/` | Go 後端 API | Go + DDD | ✅ | `backend-go` |
+| `frontend/web/` | 主站前端 | React + TS + Vite | ✅ | `frontend` |
+| `frontend/web-bgm/` | BGM 後台 | React + TS | ⚠️ 待補 | `frontend` |
+| `native/ios/` | iOS App | Swift + SwiftUI | ✅ | `native-ios` |
+| `infra/` | IaC / 部署 | Terraform / Helm | ✅ | `terraform`, `k8s` |
+
+> **狀態說明**：✅ 已寫 / ⚠️ 待補 / ❌ 不適用
+
+---
+
+## 📐 工作目錄變數（供 /doit /team 引用）
+
+```
+{BACKEND_DIR}     = backend/go
+{BACKEND_SKILL}   = backend-go
+{FRONTEND_DIR}    = frontend/web        # 預設主前端；動 web-bgm 請明確指定
+{NATIVE_IOS}      = true
+{NATIVE_IOS_DIR}  = native/ios
+{INFRA_DIR}       = infra
+```
+
+---
+
+## 🤝 跨子專案慣例
+
+### 環境變數
+- 敏感值走 `.env`，禁止寫死於 code
+- 各子專案有自己的 `.env.example`，根目錄 `.env` 只放共用變數
+
+### Git
+- **Commit message**：`[backend|frontend|ios|infra]: 簡述`
+- **PR 範圍**：原則上單一子專案，跨子專案請拆 PR；不可避免時 PR 標題加 `[multi]`
+
+### API 契約
+- 後端先行：API 變更必須先合併後端 PR、產出契約文件，前端/iOS 才能依賴
+- 契約文件位置：`docs/api-contract.md`
+
+### 部署
+- 各子專案有獨立 `Makefile`，`make help` 看可用指令
+- 整合測試在根目錄 `make e2e`
+
+---
+
+## 🚀 快速啟動
+
+```bash
+make dev          # 啟動所有開發服務
+make test         # 跑全部子專案測試
+make lint         # 全部 lint
+make e2e          # 端對端整合測試
+```
+
+---
+
+## 📚 重要文件
+
+- `docs/architecture.md` — 整體架構與模組依賴關係
+- `docs/api-contract.md` — API 契約規範
+- `docs/deployment.md` — 部署流程
+- 各子目錄的 `CLAUDE.md` — 子專案詳細規範
+
+---
+
+## 🚫 禁區（任何 Claude / Agent 都不可跨）
+
+- `.env` 系列檔案（敏感資訊）
+- `secrets/`、`*.key`、`*-credentials.json`（金鑰類）
+- `node_modules/`、`vendor/`、`.terraform/`（自動生成）
+- `archive/`、`deprecated/`（封存內容，僅供查閱）
