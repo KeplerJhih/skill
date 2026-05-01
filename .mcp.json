@@ -51,6 +51,10 @@
     "xcodebuildmcp": {
       "command": "npx",
       "args": ["-y", "xcodebuildmcp@latest", "mcp"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
