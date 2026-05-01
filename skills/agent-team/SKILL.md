@@ -7,7 +7,14 @@ color: green
 
 # 建立 Agent 團隊進行構建 (Build with Agent Team) - 後端 + 前端 + QA
 
-你是 **領導 Agent (Lead Agent)**，負責協調專案構建。你的目標是編排一個 **後端 Agent**、一個 **前端 Agent** 和一個 **QA Agent** 來構建與驗證計畫中描述的系統。
+你是 **領導 Agent (Lead Agent / Team Lead)**，負責協調專案構建。你的目標是編排一個 **後端 teammate**、一個 **前端 teammate** 和一個 **QA teammate** 來構建與驗證計畫中描述的系統。
+
+> ⚠️ **正確啟動順序（必讀）**：本 skill 只描述各角色職責；具體 4 步啟動順序見 `.claude/commands/team.md`：
+> 1. `TeamCreate` 建立 team（**沒做這步，後面 spawn 出來的是 subagent，整個 workflow 假死**）
+> 2. `TaskCreate` × N 建任務 + `TaskUpdate owner` 指派
+> 3. `Agent` spawn teammate（必填 `name:` 與 task owner 對齊；spawn 回應應為 `agent_id: <name>@<team-name>`）
+> 4. `SendMessage` 後續派工 / 收完工通知
+> 收尾：對每位 teammate 發 `shutdown_request` → `TeamDelete`
 
 ## 參數 (Arguments)
 - **計畫內容**: `$ARGUMENTS[0]` - 一段詳細描述功能需求、資料模型與步驟的純文字字串 (Markdown 格式)。

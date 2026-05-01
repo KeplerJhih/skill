@@ -1,15 +1,20 @@
 # Command: /team (Agent Team Workflow)
 
-此指令啟動 **官方 Agent Team 多 Claude 實例協作模式**（Claude Code ≥ 2.1.32）。作為 **Team Lead**，你的職責是分析需求、制定團隊藍圖、用 `Agent` tool 配 `name:` + `run_in_background: true` spawn 出常駐隊友。每位隊友是獨立 Claude 實例，可彼此 `SendMessage` 直接對話、共享 task list、自動 idle 通知。
+此指令啟動 **官方 Agent Team 多 Claude 實例協作模式**（Claude Code ≥ 2.1.32）。作為 **Team Lead**，你的職責是分析需求、制定團隊藍圖、**先 `TeamCreate` 建立 team，再用 `Agent`（在 team context 內 / 或帶 `team_name`）spawn 出 teammate**。每位 teammate 是獨立 Claude Code session，自動取得 `SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet` 協作工具，可彼此 `SendMessage` 直接對話、共享 task list、自動 idle 通知。
 
 **⚠️ 核心原則：需求分類、契約優先、Mailbox 對話、品質門。** 嚴禁未獲用戶明確確認 (`Yes`/`Y`) 前啟動團隊。
 
-**🔑 與 `/doit` 區別**：`/doit` 是單人 Tech Lead 模式（你親自編碼）；`/team` 是多 Claude 實例團隊模式（隊友自主協作，你監督調度）。
+**🔑 與 `/doit` 區別**：`/doit` 是單人 Tech Lead 模式（你親自編碼）；`/team` 是多 Claude 實例團隊模式（teammate 自主協作，你監督調度）。
 
-**⚠️ 啟動機制（重要，不要踩雷）**：
-- ✅ **正確**：用 `Agent` tool spawn，必填 `name:`（讓隊友可被 `SendMessage` by name 喚醒）+ `run_in_background: true`（讓隊友不阻塞 Lead）+ `model:`（依藍圖填）+ `subagent_type:` + 帶足上下文的 `prompt:`
-- ✅ **後續延續對話**：對「同一位」隊友後續派工用 `SendMessage(to: "<name>")`；**不要再 call `Agent` 起一次同名隊友**——那會建立全新 context 失去先前對話
-- ❌ **錯誤**：把「請建立一個 agent team...」當作純文字輸出，期待 harness 自動 spawn——這只是文字，不會起任何隊友
+**⚠️ 啟動機制（4 步順序，不可跳過）**：
+1. **`TeamCreate`** 建立 team — 建立 `~/.claude/teams/{team-name}/` 與對應 task list 目錄。**這是讓後續 spawn 出的 entity 變成 teammate（而非單向 subagent）的前置條件**。
+2. **`TaskCreate` × N** 建立任務（自動綁進這個 team 的 task list），用 `TaskUpdate` 設 `owner` + `addBlockedBy`。
+3. **`Agent`** spawn teammate — 必填 `name:`（要與 task `owner` 完全一致）+ `subagent_type:` + `model:` + 帶足上下文的 `prompt:`。**只要 Lead session 在 team context 內，spawn 出的就是 teammate**（不必顯式傳 `team_name`，runtime 自動繼承 current team）。回應格式 `agent_id: name@team-name` 即確認為 teammate。
+4. **`SendMessage(to: "<name>")`** 後續派工 — teammate 是常駐 Claude session，by-name 喚醒會延續原 context；**不要再 call `Agent({name: "<name>"})`**，那會起新實例丟失對話。
+
+**🔑 致命陷阱（之前踩過的雷）**：
+- ❌ 跳過第 1 步直接呼叫 `Agent` → 起的是 **subagent 而非 teammate**，subagent runtime 完全沒有 SendMessage / TaskList 等協作工具，無法 mailbox 對話、無法操作共享 task list，整個 team workflow 假死
+- 區分方式：spawn 回應若是 `agentId: <hash>` → subagent 啟動失敗；若是 `agent_id: <name>@<team>` → teammate 正確
 
 ---
 
@@ -167,30 +172,44 @@
 - 撰寫 QA 場景檔 `team/scenarios/{feature}.qa.md`（從藍圖目標展開為可驗證的用戶流程清單）
 - 若 🅱️ 模式：在 `team/contracts/{feature}.api.md` 留好骨架（標題 + 預期端點清單），後端隊友據此補完
 
-### 2. 啟動 Agent Team（兩階段：先建共享 task list，再 spawn 常駐隊友）
+### 2. 啟動 Agent Team（4 步順序執行，不可跳過任一步）
 
-#### 2-a. 先載入協作工具
+#### 2-a. 載入協作工具到 Lead session
 
-`SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet` 是 deferred tools，需要先用 `ToolSearch` 把 schema 拉進來才能呼叫：
+`TeamCreate` / `SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet` / `TeamDelete` 是 deferred tools，先把 schema 拉進來：
 
 ```
-ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"
+ToolSearch query="select:TeamCreate,SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet,TeamDelete"
 ```
 
-#### 2-b. 建立共享 task list（指派 owner + blockedBy）
+#### 2-b. **`TeamCreate` 建立 team（關鍵步驟，跳過會整個崩盤）**
 
-依藍圖每階段建一個 epic task（不是把每個 sub-step 都拆出來；過細的 task 反而干擾隊友）。建議顆粒度：
+```
+TeamCreate {
+  team_name: "<feature>-team",   // 例：quote-force-team；用 kebab-case
+  description: "本次任務目的的一句話",
+  agent_type: "team-lead"
+}
+```
+
+成功會回傳 `team_file_path: ~/.claude/teams/<name>/config.json` + `lead_agent_id: team-lead@<name>`。**Lead session 自此進入 team context，後續 TaskCreate / Agent 自動使用該 team**。
+
+> ⚠️ 沒做這步直接 `Agent`，spawn 出來的是 subagent（無協作工具），整個 workflow 假死。這是 v1/v2 已經踩過的雷。
+
+#### 2-c. 建立共享 task list（指派 owner + blockedBy）
+
+依藍圖每階段建一個 epic task（不要把每個 sub-step 都拆出來；過細的 task 反而干擾 teammate）。建議顆粒度：
 
 - **後端**：1 個 epic + 1 個「補完 API 契約」 task（後者是獨立的 milestone，blocks 前端）
 - **前端**：1 個 epic（blocked-by 契約 task）
 - **行動端**：1 個 epic（blocked-by 契約 task，與前端並行）
 - **QA**：1 個 epic（blocked-by 前端 / 行動端 epic）
 
-每個 task 用 `TaskCreate` 建立後，立刻 `TaskUpdate` 設 `owner:` 與 `addBlockedBy:`。owner 字串必須與下一步即將 spawn 的隊友 `name:` 完全一致（例：`be-{feature}`）。
+每個 task 用 `TaskCreate` 建立後，立刻 `TaskUpdate` 設 `owner:` 與 `addBlockedBy:`。owner 字串必須與下一步即將 spawn 的 teammate `name:` 完全一致（例：`be-{feature}`）。
 
-#### 2-c. 並行 spawn 常駐隊友
+#### 2-d. 並行 spawn teammate（用 Agent tool，但這次是在 team context 內）
 
-**用 `Agent` tool 一次發送多個 tool call** spawn 所有隊友（單一訊息多 tool call = 並行）。每個 spawn 必填：
+**用 `Agent` tool 一次發送多個 tool call** spawn 所有 teammate（單一訊息多 tool call = 並行）。每個 spawn 必填：
 
 | 參數 | 內容 |
 |------|------|
@@ -198,31 +217,34 @@ ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"
 | `name` | 與 task owner 字串完全一致（例 `be-{feature}`） |
 | `model` | 依藍圖填（`opus` / `sonnet` / `haiku`） |
 | `run_in_background` | **必填 `true`**——否則 Lead 會被阻塞、無法後續調度 |
-| `prompt` | 自包含的隊友任務簡報，至少包含：本人名字、工作目錄、契約 / 場景 / 決策三檔絕對路徑、`TaskList` 後認領自己的 task、SSRF / 安全約束、idle 行為說明、回報格式 |
+| `prompt` | 自包含的 teammate 任務簡報，至少包含：本人名字、工作目錄、契約 / 場景 / 決策三檔絕對路徑、`TaskList` 後認領自己的 task、SSRF / 安全約束、idle 行為說明、回報格式 |
 
-> ⚠️ **prompt 一定要自包含**：每個隊友是獨立 Claude 實例，看不到 Lead 的對話歷史。需要的所有上下文（路徑、約束、預設帳密策略、模型決策）都要寫進 prompt。
+> ⚠️ **回應格式驗證**：spawn 後 runtime 回應必須是 `agent_id: <name>@<team-name>`（例：`be-quote-force@quote-force-team`）。若回應是 `agentId: <hash>` → 你**沒在 team context 內**或**忘了 TeamCreate**，spawn 出來的是 subagent，立即停手檢查。
 
-> ⚠️ **不要在 prompt 裡寫死 skill 名稱**：隊友 `.md` 已要求自行偵測技術棧、動態載入 skill。
+> ⚠️ **prompt 一定要自包含**：每個 teammate 是獨立 Claude session，看不到 Lead 的對話歷史。需要的所有上下文（路徑、約束、預設帳密策略、模型決策）都要寫進 prompt。
 
-#### 2-d. 期間如何延續對話
+> ⚠️ **不要在 prompt 裡寫死 skill 名稱**：teammate `.md` 已要求自行偵測技術棧、動態載入 skill。
 
-隊友 spawn 後會跑到 idle / 完成。**要派新任務或補資訊**：
+#### 2-e. 期間如何延續對話
 
-- ✅ `SendMessage(to: "<name>", message: "...")` ── 同一個隊友 context 延續
-- ❌ 再 call `Agent({name: "<name>", ...})` ── 起新實例、失去原 context
+teammate spawn 後跑到 idle / 完成（idle 是常態，不是錯誤）。**要派新任務或補資訊**：
 
-#### 2-e. 溝通協定（寫進每位隊友的 prompt）
+- ✅ `SendMessage(to: "<name>", message: "...")` ── 同一個 teammate context 延續，by-name 喚醒
+- ❌ 再 call `Agent({name: "<name>", ...})` ── 起全新實例、丟失原 context
 
+#### 2-f. 溝通協定（寫進每位 teammate 的 prompt）
+
+- teammate 在 team context 內**自動有** SendMessage / TaskList / TaskCreate / TaskUpdate / TaskGet — 不必教它們 ToolSearch
 - 前端 / 行動端遇契約缺項 → 直接 SendMessage 給 be-{feature}，不必經 Lead
 - QA 失敗 → 由 qa-{feature} 自行分析並 SendMessage 派修對應隊友
-- 任何隊友想加任務 → TaskCreate + 適當 addBlocks / addBlockedBy
+- 任何 teammate 想加任務 → TaskCreate + 適當 addBlocks / addBlockedBy
 
-#### 2-f. Dev server 生命週期（小雷）
+#### 2-g. Dev server 生命週期（小雷）
 
-`backend.md` / `frontend.md` 教隊友 idle 時自啟 dev server 在 background bash。但**那個 bash 綁在隊友 agent process 上**，agent 一結束（或 reaper 收）bash 也跟著死。因此：
+`backend.md` / `frontend.md` 教 teammate idle 時自啟 dev server 在 background bash。但**那個 bash 綁在 teammate process 上**，teammate 一結束（或 reaper 收）bash 也跟著死。因此：
 
 - 若 QA 是「下一輪」才 spawn / 喚醒，Lead 進 QA 階段前要自己重啟雙端 server
-- 或在隊友 prompt 中**改成回報 server 啟動指令而非自己啟動**，由 Lead 在自己 session 起 background bash（pid 不會隨子 agent 死）
+- 或在 teammate prompt 中**改成回報 server 啟動指令而非自己啟動**，由 Lead 在自己 session 起 background bash（pid 不會隨子 agent 死）
 
 ### 3. 監督與調度
 
@@ -277,13 +299,29 @@ QA 失敗時，**優先讓隊友自主處理**：
 > - qa-{feature}: [skill 清單]
 > - cr-{feature}: [skill 清單]（若有）
 
-### 6. 清理團隊（最後一步）
+### 6. 清理團隊（最後一步，2 段流程）
+
+#### 6-a. 對每位 teammate 發 `shutdown_request`
 
 ```
-Clean up the team
+SendMessage {
+  to: "<teammate-name>",
+  message: { type: "shutdown_request", reason: "task completed" }
+}
 ```
 
-> ⚠️ 必須由 Lead 執行清理。隊友不應執行清理。每個 session 一次只能管理一個 team，下次任務開始前要先清。
+teammate 收到後 idle 並回 `shutdown_response { approve: true }`，然後優雅退出。每位都要單獨發一次。
+
+#### 6-b. `TeamDelete` 移除 team 目錄
+
+```
+TeamDelete {}
+```
+
+無參數（會用 current team context）。會清掉 `~/.claude/teams/<name>/` 與 `~/.claude/tasks/<name>/`。
+
+> ⚠️ **TeamDelete 會在仍有 active teammate 時失敗** — 必須先全部 shutdown。
+> ⚠️ 必須由 Lead 執行清理。Teammate 不應執行清理。每個 session 一次只能管理一個 team，下次任務開始前要先清。
 
 ---
 
