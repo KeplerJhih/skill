@@ -58,6 +58,7 @@
 - **介面模式**：簡約（sheet 設計）vs 經典（iOS 26 Liquid Glass TabView）— 同頁設定 tab 順序與開關
 - **資料備份**：JSON v2 (含 tags) / CSV 匯出 + Import + iCloud Drive 提示（Tier 1）
 - **設定頁補完**：Categories 隱藏子分類 / About / Local vault 詳情
+- **分類順序與顯示**（2026-05）：頂層 5 分類 + 投資 6 子分類皆可拖曳排序 + Toggle 顯示;設定「清單與排序」為入口;主要分類至少留 1 個（防呆 shake + 警示淡入）;舊 `hiddenInvestmentSubs` 一次性 migrate 到新 `investSubConfig`
 
 ## 端點速覽
 
