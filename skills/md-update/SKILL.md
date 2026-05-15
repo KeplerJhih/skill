@@ -1,6 +1,6 @@
 ---
 name: md-update
-description: 當使用者輸入「update md」、「更新文檔」、「更新 md」、「記錄踩坑」、「寫進 CLAUDE.md」等指令時觸發。收斂當前對話 / 最近 commits 內的踩坑與設計決策,組織成精煉的「踩坑日誌」entry,**先回報草稿等使用者確認**再寫入專案對應的 CLAUDE.md。檔案過長時提議拆到 references/ 之後引用。
+description: 當使用者輸入「update md」、「更新文檔」、「更新 md」、「記錄踩坑」、「寫進 CLAUDE.md」等指令時觸發。收斂當前對話 / 最近 commits 內的踩坑與設計決策,組織成精煉的「踩坑日誌」entry,**先回報草稿等使用者確認**再寫入專案對應的 CLAUDE.md。檔案過長時提議拆到子專案 docs/ 目錄之後引用。
 color: yellow
 ---
 
@@ -58,8 +58,9 @@ color: yellow
 
 跑 `wc -l <target>`。若 > 700 行,**主動提議拆分**:
 
-- 把較大段(如「SWAGGER 規範」/「LOGGING」/「拖曳實作細節」)抽到 `.claude/skills/<scope>/references/<topic>.md`
-- CLAUDE.md 只留**一句摘要 + 連結到 reference 檔**
+- 把較大段(如「SWAGGER 規範」/「LOGGING」/「拖曳實作細節」)抽到該 CLAUDE.md 所在子專案的 `docs/<topic>.md`(例如 `native/ios/orua/docs/whatsnew.md`)
+- CLAUDE.md 只留**一句摘要 + 相對路徑連結到 docs/ 檔**(例如 `詳見 docs/whatsnew.md`)
+- 若 `docs/` 目錄不存在,先建立
 
 **不要主動拆** — 給使用者選擇:`A. 拆 / B. 直接加進 CLAUDE.md / C. 你決定`。
 
