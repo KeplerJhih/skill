@@ -21,6 +21,31 @@ color: yellow
 - 跑 `git log --oneline -10` 看最近改了什麼
 - 看 conversation 內的踩坑討論(不在 commit message 裡的內容)
 - 識別變更範圍是純子專案還是跨專案
+- **檢查是否有 active teammate / agent**:看 conversation 是否有 teammate 訊息、`TaskList` 是否有 in_progress、是否剛走完 `/team` workflow
+
+### Step 1.5: 若有 active teammate / agent,先諮詢實作端視角(MANDATORY)
+
+Lead 從 conversation 看到的是「成果 + 對話摘要」,**實作細節的踩坑只有實際寫代碼的 teammate 最清楚**。如果有以下情境之一,先 `SendMessage` 詢問:
+
+- 剛走完 `/team` workflow,teammate 還沒 shutdown
+- 對話 context 內有 teammate 工作回報訊息
+- 剛 `Agent` spawn 過 subagent 處理任務
+
+**詢問模板**:
+
+```
+我們準備把這次工作的踩坑與設計決策寫進 <對應的 CLAUDE.md>。
+請列 3-5 條**真正非顯而易見、值得記下來給未來開發者**的內容:
+
+1. 哪些是「看代碼也看不出來」的設計取捨(為什麼選 A 不選 B)
+2. 哪些是「不寫進 CLAUDE.md 下次又會踩」的隱形 bug 模式 / 框架陷阱
+3. 哪些跟既有 CLAUDE.md 段落矛盾、需要順手修舊段
+
+不必寫 changelog 性質的東西(commit message 已說明)。每條 ≤ 100 字,
+精確引用 API 名 / 檔案路徑。
+```
+
+**整合策略**:把 teammate 從實作端看到的 + Lead 從 conversation 看到的合在一起,**去重 + 取交集**。若 teammate 沒回應(已 shutdown 等),用 conversation 內既有的訊息回放當作 fallback,但要在草稿標註「來自 Lead 推論,未經 teammate 確認」。
 
 ### Step 2: 識別目標 CLAUDE.md(按 `.claude/CLAUDE.md` 維護方針)
 
@@ -89,9 +114,10 @@ color: yellow
 1. **這是踩坑日誌不是 changelog** — write WHY, not WHAT。WHAT 屬於 commit message
 2. **寧短勿長** — 單一段落 ≤ 150 字,超過就拆
 3. **不重複** — 已在 git log / 既有 CLAUDE.md 段落寫過的不要再寫
-4. **不主動建 task** — 這是 atomic doc 更新,不需 TaskCreate
-5. **先回報草稿** — 嚴禁未確認直接 edit
-6. **不污染 commit** — 只 add 明確要改的 md,不 -A
+4. **諮詢實作端** — 有 active teammate / agent 時必先 SendMessage 問,不憑 Lead 單一視角拍板
+5. **不主動建 task** — 這是 atomic doc 更新,不需 TaskCreate
+6. **先回報草稿** — 嚴禁未確認直接 edit
+7. **不污染 commit** — 只 add 明確要改的 md,不 -A
 
 ---
 
