@@ -47,15 +47,39 @@ Lead 從 conversation 看到的是「成果 + 對話摘要」,**實作細節的�
 
 **整合策略**:把 teammate 從實作端看到的 + Lead 從 conversation 看到的合在一起,**去重 + 取交集**。若 teammate 沒回應(已 shutdown 等),用 conversation 內既有的訊息回放當作 fallback,但要在草稿標註「來自 Lead 推論,未經 teammate 確認」。
 
-### Step 2: 識別目標 CLAUDE.md(按 `.claude/CLAUDE.md` 維護方針)
+### Step 2: 識別目標 CLAUDE.md 位置(自動偵測,不寫死路徑)
 
-| 變更範圍 | 目標 |
-|---------|------|
-| 純後端(service / provider / handler / DB) | `backend/go/CLAUDE.md` |
-| 純 iOS(domain / store / view / i18n) | `native/ios/orua/CLAUDE.md` |
-| 純官網 / landing | `frontend/landing/CLAUDE.md` |
-| 跨專案的功能總覽 / 端點 / 部署 | `.claude/CLAUDE.md`(根目錄) |
-| `.claude/skills/` 變更 | 對應 skill 的 SKILL.md(**不是 CLAUDE.md**) |
+依以下順序定位,**不假設專案結構**:
+
+1. **讀根 `./CLAUDE.md`**(若存在)→ 拿子專案地圖,對照本次變更目錄找對應子 CLAUDE.md。地圖通常以 markdown 表格列出子目錄 + 對應 CLAUDE.md
+2. **若無根 CLAUDE.md** → 依變更檔案所在子目錄推論:
+   - 改動集中在單一子目錄 → 該子目錄的 CLAUDE.md(例如改 `backend/python/` 內檔 → `backend/python/CLAUDE.md`)
+   - 改動跨多個子目錄 → 根 `./CLAUDE.md`
+   - 改動只在 `.claude/skills/<name>/` → 對應的 `SKILL.md`(**不是 CLAUDE.md**)
+3. **檢查目標檔是否存在**(用 `ls <target>` 或 `wc -l <target>` 探測):
+   - 存在 → 走「補丁分支」(Step 5/6/7 原流程)
+   - 不存在 → 走「首建分支」(見 Step 2.5)
+
+### Step 2.5: 首建 CLAUDE.md 分支(目標檔不存在時)
+
+**先詢問使用者是否要建立**,絕不主動建檔:
+
+```
+目前 <target absolute path> 不存在,本次踩坑要寫進去需先建立 CLAUDE.md。是否建立?
+
+A. 是 — 以 `.claude/shared/templates/CLAUDE.md.template` 為骨架,本次踩坑作為首條 entry
+B. 否,我先別寫了(中止流程)
+C. 是,但這個路徑不對 — 我告訴你正確位置
+```
+
+**使用者選 A**:
+- 若 template 存在 → 讀 template + 替換占位符(`{PROJECT_NAME}` 等用 dir name 或 `package.json`/`go.mod`/`Cargo.toml` 等 manifest 推論)
+- 若 template 不存在(其他專案 clone skill 時可能沒帶)→ 用最小骨架:`# <ProjectName>\n\n` + 「## <feature> 踩坑」一段
+- 用 `Write` 工具寫入(此情境唯一 Write 合法用法,見 Step 7)
+
+**使用者選 B**:中止,不寫任何檔。
+
+**使用者選 C**:重新走 Step 2.5 用新路徑。
 
 ### Step 3: 內容篩選 — 該寫進 CLAUDE.md 嗎?
 
@@ -79,15 +103,50 @@ Lead 從 conversation 看到的是「成果 + 對話摘要」,**實作細節的�
 - 對技術細節精確引用 — i18n key 名、struct 名、modifier 名、檔案路徑
 - 引用具體檔案絕對路徑,而非「某個 view」這種模糊指涉
 
-### Step 5: 檢查現有 CLAUDE.md 長度
+### Step 5: 檢查現有 CLAUDE.md 長度(僅補丁分支)
 
-跑 `wc -l <target>`。若 > 700 行,**主動提議拆分**:
+> **首建分支跳過本步驟** — 新建檔不必檢查長度。
 
-- 把較大段(如「SWAGGER 規範」/「LOGGING」/「拖曳實作細節」)抽到該 CLAUDE.md 所在子專案的 `docs/<topic>.md`(例如 `native/ios/orua/docs/whatsnew.md`)
-- CLAUDE.md 只留**一句摘要 + 相對路徑連結到 docs/ 檔**(例如 `詳見 docs/whatsnew.md`)
+**兩條觸發條件**(任一達標 → 主動提議拆分):
+
+1. **整檔行數**:`wc -l <target>` > 700 行
+2. **單段字數**:**任何 H2 段(`## ...` 起算到下個 `## `)字數 > 450 字** — 用 `wc -m` 算字符數(中文 1 字符算 1,英文 word 也算內部字母數)。**這是強制觸發**,不論整檔行數是否爆。
+
+抓單段字數的快速做法:
+```bash
+awk '/^## /{if(name) print count, name; name=$0; count=0; next} {count+=length($0)} END {if(name) print count, name}' <target> | sort -rn | head -3
+```
+
+**拆分動作**:
+- 把超標的段(或新加會超標的段)抽到該 CLAUDE.md 所在子專案的 `docs/<topic>.md`(例如 `native/ios/orua/docs/icloud-sync.md`)
+- CLAUDE.md 只留**一句摘要 + 相對路徑連結到 docs/ 檔**(例如 `iCloud 自動同步詳見 docs/icloud-sync.md`)
 - 若 `docs/` 目錄不存在,先建立
 
 **不要主動拆** — 給使用者選擇:`A. 拆 / B. 直接加進 CLAUDE.md / C. 你決定`。
+
+**為何兩條都要**:整檔行數只抓「累積太多段」的情況;單段字數抓「某個主題太肥」的情況 — 後者即使整檔才 500 行,讀者翻到那段也會被淹沒,單獨切出去比較好讀。
+
+### Step 5.5: 順手偵測過時 / 不必要段落(MANDATORY)
+
+跑長度檢查的同時,**掃一遍既有段落**找可刪/可縮候選。目的:CLAUDE.md 是給未來開發者的索引,過時資訊比沒寫還糟(誤導)。
+
+**過時訊號**(找到任一就標記):
+- 段內提到的 API / class / function / 檔案名稱,用 `Grep`/`Glob` 在 source code 找不到(被重構/移除)
+- 提到「未實作」「待補」「Tier X 未上」的狀態,而 `git log` 顯示後續已完成
+- 提到某版本舊行為(「v2.1 重構前」/「v1 schema」),最新版本已無此 case 且無回溯價值
+- 跟最近 commit 的實作明顯矛盾(舊段沒被同步更新)
+- 段標題或標籤帶日期且超過 1 年(例如 `(2024-08)`),內容已被後續整合
+
+**不必要訊號**:
+- 純複述代碼結構(class 欄位列表、function 簽名)— 看代碼就知
+- 重複 commit message 內容(changelog 性質)
+- 設計取捨的「當下脈絡」已無人在意(例如「為了避免某個已廢功能」)
+
+**動作**:
+- 候選清單列出來 → 跟使用者確認(每條給「保留 / 刪除 / 縮短」三選)
+- 同意刪除 → `Edit` 移除整段或對應 bullet
+- 同意縮短 → 協商最簡 wording 後 edit
+- **不主動刪** — 即使 Grep 找不到 API,也可能是 skill 沒索引到的檔。先列候選等 user 拍板
 
 ### Step 6: 草稿 + 確認(MANDATORY)
 
@@ -101,8 +160,14 @@ Lead 從 conversation 看到的是「成果 + 對話摘要」,**實作細節的�
 
 ### Step 7: 寫入 + commit
 
-- 用 `Edit` tool 寫入(不用 `Write` — 既有 CLAUDE.md 必須以 Edit 修改)
-- commit message 風格參考既有 git log:`docs(<scope>): CLAUDE.md ... 段補 ...`
+**寫入工具(依分支選)**:
+- **補丁分支**(目標檔已存在) → `Edit`,**永遠不要對既有 CLAUDE.md 用 Write**,Write 會整檔覆蓋
+- **首建分支**(目標檔不存在 + 使用者已同意建立) → `Write`,此情境唯一 Write 合法用法
+
+**commit message** 風格參考既有 git log:
+- 補丁: `docs(<scope>): CLAUDE.md ... 段補 ...`
+- 首建: `docs(<scope>): 首建 CLAUDE.md ...`
+
 - **不主動 push**,除非使用者要求
 - **不開新 branch** — docs 改動直接在 working branch 即可(除非 working branch 是受保護的 main / dev,那要看使用者意願)
 - **不 commit 被工具自動 touch 的檔**(例如 Xcode 偷改的 `CURRENT_PROJECT_VERSION`、`.DS_Store`),只 add 明確的 md 檔

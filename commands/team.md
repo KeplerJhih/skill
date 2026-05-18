@@ -325,6 +325,44 @@ TeamDelete {}
 
 ---
 
+### 7. Team shutdown 後的 follow-up 紀律(Lead 自己接手寫 code)
+
+team 收尾後常見情境:用戶提小範圍 follow-up(改一個 endpoint / 修一個 UI bug / clean 冗餘),重起一個 team 太重,Lead 直接動手最快。
+
+**這時 Lead 從「調度者」變成「implementer」,但 `/team` 的所有紀律都是 teammate-centric 寫的,沒涵蓋這情境 → Lead 容易憑記憶 / 憑感覺寫,跳過 skill 載入與 references 翻閱。**
+
+**強制 ritual(動 implementation code 之前)**:
+
+1. **判斷範圍**:這個 follow-up 能不能 1 個 Skill 涵蓋?
+   - 是 → Lead 自己做,走下方 ritual
+   - 否(跨多端 + 要 QA / 規模中大) → 重起 team 或 `/doit`
+
+2. **動態選擇 skill 並載入(MANDATORY)**:
+
+   動手前先問自己:「我這次改動有什麼非顯而易見的紀律 / 規範 / 慣例?」
+   - 有 → 從 `ls .claude/skills/` 或 system prompt 的 available-skills 找對應 1-N 個 skill,`Skill` 工具 invoke 載入
+   - **不寫死「目錄 → skill」mapping**:子專案結構會變、同目錄可能多技術棧、新加技術棧時 mapping 會過時。**Lead 看當下要做什麼判斷,不查表**
+   - 範例(僅示意,不是 hardcoded 規則):
+     - 改後端 service / handler / cache → 評估需要該語言對應的 backend skill 與 references(swagger / redis / logging 之類)
+     - 改前端 UI 組件 / 樣式 → 評估前端 skill / design skill
+     - 改 IaC / 容器 / CI → 評估 terraform / k8s / devops skill
+   - **不要因為「我熟」就跳過** — context 長了會忘,特別是子專案累積的踩坑紀錄
+
+3. **讀對應 CLAUDE.md 相關段**(踩坑日誌、設計取捨):
+   - 改子專案 X → grep `<X>/CLAUDE.md` 對應段(認證 / cache / 部署等)
+   - 確認不再踩既有坑
+
+4. **動 code → 跑該專案的 test / smoke / typecheck / build 驗收**(不要憑「我看 diff 覺得 OK」)
+
+5. **改完若有新踩坑 / 新設計取捨,寫進對應 CLAUDE.md**(可走 `/update-md` skill)
+
+**反 pattern(過去踩過)**:
+- ❌「這個 follow-up 範圍很小,skill 不必載」→ 結果寫的代碼跟既有規範細節對不上
+- ❌「我看過 CLAUDE.md,記得內容」→ context 長了會忘,特別是 10+ 條踩坑紀錄
+- ❌ 直接 `Edit` source file 沒先評估「這個改動需要對齊什麼紀律」
+
+---
+
 ## 🛡️ 已知限制與對應
 
 | 限制 | 對應方式 |

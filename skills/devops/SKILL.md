@@ -204,8 +204,16 @@ project-root/
 
 路徑：`{frontend-dir}/.devops/dockerfile`
 
+### 前端通用規範（本團隊統一）
+
+- **Port 統一 `8080`** — 所有前端容器（landing / admin / 任何 SPA 站）nginx 一律 `listen 8080`，不要每個站用不同 port。對齊 `frontend` skill 的 reverse proxy pattern，也方便 ops 部署、reverse proxy 設定、HEALTHCHECK 端統一記憶。
+- **隱藏 nginx 版本號** — nginx.conf 內必加 `server_tokens off;`，避免 response header `Server: nginx/1.27.x` 與 error 頁 footer 暴露版本資訊。基本安全強化。
+- **同源 reverse proxy（API 動態轉發）** — 前端代碼**絕不寫死後端域名**，axios 永遠打相對路徑 `/api/...`，由 nginx 用 `map $host` runtime 從 Host header 動態推導 backend（例：`admin.<root>` → `api.<root>`），動態 `proxy_pass` 必須配 `resolver`。一份 image 部署任何域名都自動運作，零 env、零 CORS。完整三層機制（dev `server.proxy` / preview `preview.proxy` / prod nginx）、`vite.config.ts` 與 `nginx.conf` 範本、踩坑提醒見 **`.claude/skills/frontend/references/api-proxy-pattern.md`**。
+
+### dockerfile 規範
+
 1. **多階段建置**：Node.js 階段執行 `npm ci` + 建置指令（來自 `package.json` scripts 掃描結果）；Nginx 階段僅提供 `dist/` 靜態檔案。
-2. **Nginx 配置**：自訂 `nginx.conf`，包含 SPA 路由（`try_files $uri /index.html`）、日誌輸出至 stdout/stderr（`access_log /dev/stdout; error_log /dev/stderr warn;`）、安全標頭、健康檢查端點（`/health`）。
+2. **Nginx 配置**：自訂 `nginx.conf`，包含 SPA 路由（`try_files $uri /index.html`）、日誌輸出至 stdout/stderr（`access_log /dev/stdout; error_log /dev/stderr warn;`）、安全標頭、健康檢查端點（`/health`）、**`server_tokens off;` 隱藏版本號**。
 3. **非 root 使用者**：使用 Nginx 內建的 `nginx` 使用者，**必須在建置階段處理以下權限問題**（否則 K8s `runAsNonRoot` 環境會啟動失敗）：
    - **監聽端口**：非 root 無法綁定 < 1024 的特權端口，nginx.conf 必須改為 `listen 8080`（而非 80），K8s Service 再將 80 映射到 containerPort 8080
    - **PID 檔案**：預設 `/run/nginx.pid` 僅 root 可寫，必須用 `sed` 改為 `/tmp/nginx.pid`

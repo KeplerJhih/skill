@@ -56,8 +56,10 @@ URL State：分頁、過濾條件應優先儲存於 URL Query Params。
 API 請求：統一透過 `src/api/client.ts` 的 Axios 實例發送，嚴禁在元件中硬編碼後端域名或 Port。
 靜態資源 URL（如上傳圖片等後端回傳的相對路徑）：一律直接使用，嚴禁拼接 `http://localhost:XXXX`。
 開發環境：所有需代理到後端的路徑，統一在 `vite.config.ts` 的 `proxy` 中配置，Port 只需設定一處。
-生產環境：前後端同域名部署，相對路徑自動生效。
+生產環境：前後端同源 reverse proxy（容器內 nginx 用 `map $host` 動態轉發），前端永遠打相對路徑。
 禁止事項：不可在元件中使用 `import.meta.env.VITE_API_BASE` 或任何硬編碼的 `localhost:PORT` 拼接 URL。
+
+詳細的「同源 reverse proxy + 動態 backend 推導」三層機制（dev / preview / nginx）、踩坑提醒（resolver / SNI / Host header 改寫等），請查閱 **`references/api-proxy-pattern.md`**。**此規範同樣適用 React / 任何 SPA**，非 Vue 限定。
 
 📝 開發指令
 ```Bash
