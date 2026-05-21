@@ -204,16 +204,8 @@ project-root/
 
 路徑：`{frontend-dir}/.devops/dockerfile`
 
-### 前端通用規範（本團隊統一）
-
-- **Port 統一 `8080`** — 所有前端容器（landing / admin / 任何 SPA 站）nginx 一律 `listen 8080`，不要每個站用不同 port。對齊 `frontend` skill 的 reverse proxy pattern，也方便 ops 部署、reverse proxy 設定、HEALTHCHECK 端統一記憶。
-- **隱藏 nginx 版本號** — nginx.conf 內必加 `server_tokens off;`，避免 response header `Server: nginx/1.27.x` 與 error 頁 footer 暴露版本資訊。基本安全強化。
-- **同源 reverse proxy（API 動態轉發）** — 前端代碼**絕不寫死後端域名**，axios 永遠打相對路徑 `/api/...`，由 nginx 用 `map $host` runtime 從 Host header 動態推導 backend（例：`admin.<root>` → `api.<root>`），動態 `proxy_pass` 必須配 `resolver`。一份 image 部署任何域名都自動運作，零 env、零 CORS。完整三層機制（dev `server.proxy` / preview `preview.proxy` / prod nginx）、`vite.config.ts` 與 `nginx.conf` 範本、踩坑提醒見 **`.claude/skills/frontend/references/api-proxy-pattern.md`**。
-
-### dockerfile 規範
-
 1. **多階段建置**：Node.js 階段執行 `npm ci` + 建置指令（來自 `package.json` scripts 掃描結果）；Nginx 階段僅提供 `dist/` 靜態檔案。
-2. **Nginx 配置**：自訂 `nginx.conf`，包含 SPA 路由（`try_files $uri /index.html`）、日誌輸出至 stdout/stderr（`access_log /dev/stdout; error_log /dev/stderr warn;`）、安全標頭、健康檢查端點（`/health`）、**`server_tokens off;` 隱藏版本號**。
+2. **Nginx 配置**：自訂 `nginx.conf`，包含 SPA 路由（`try_files $uri /index.html`）、日誌輸出至 stdout/stderr（`access_log /dev/stdout; error_log /dev/stderr warn;`）、安全標頭、健康檢查端點（`/health`）。
 3. **非 root 使用者**：使用 Nginx 內建的 `nginx` 使用者，**必須在建置階段處理以下權限問題**（否則 K8s `runAsNonRoot` 環境會啟動失敗）：
    - **監聽端口**：非 root 無法綁定 < 1024 的特權端口，nginx.conf 必須改為 `listen 8080`（而非 80），K8s Service 再將 80 映射到 containerPort 8080
    - **PID 檔案**：預設 `/run/nginx.pid` 僅 root 可寫，必須用 `sed` 改為 `/tmp/nginx.pid`
@@ -333,6 +325,88 @@ build-{sub-service}: ## 建置 {sub-service} Docker 映像（需指定 REPO）
 - **檢查映像大小**：編譯型語言（Go/Rust）後端 < 50MB，直譯型語言後端 < 200MB，前端 < 50MB。
 - **掃描安全漏洞**：使用 `docker scout` 或 `trivy`。
 - **避免覆蓋**：若步驟 1c 偵測到已有 dockerfile 或 docker-compose，應先比對差異，詢問用戶是更新還是略過。
+
+---
+
+## 踩雷 SOP（歷史 incident 整理）
+
+> 以下為導入 / 變更 CI/CD 時容易踩到的雷與對應修法。**任何路徑或 target 命名變動後，請對照此清單檢查**。
+
+### 1. buildspec 路徑變動 → 必須 update CodeBuild project
+
+CodeBuild project 的 `source.buildspec` 欄位是**寫死**在 AWS project config 內，不會跟著 repo 自動更新。
+
+**症狀**：
+```
+Phase context status code: YAML_FILE_ERROR
+Message: stat .../path/to/buildspec.yml: no such file or directory
+```
+
+**觸發條件**：
+- 把 `devops/` 改名為 `.devops/`（或任何目錄重命名）
+- 把 `buildspec.yml` 改為 `buildspec-<service>.yml`
+- 把 buildspec 從 repo 根目錄搬到子目錄
+
+**修法**：路徑變動後立即同步 AWS：
+```bash
+aws codebuild update-project \
+  --name <project-name> \
+  --region <aws-region> \
+  --source type=GITLAB_SELF_MANAGED,location=<gitlab-url>,gitCloneDepth=1,buildspec=<new-buildspec-path>
+```
+
+### 2. Jenkins 創 tag 撞 local 殘留
+
+Jenkins workspace 的 git working tree 可能繼承自舊 repo 或前次手動測試，**local 仍有殘留 tag**。
+
+**症狀**：
+```
++ git tag <tag-name>
+fatal: tag '<tag-name>' already exists
+```
+
+**錯誤假設**：「Jenkins SCM 用 `--no-tags` fetch，所以 `git tag -l` 永遠是空」— 這個假設在 workspace 不純淨時會失效。
+
+**修法**：`createAndPushTag` / `createImmutableTag` 必須無條件清 local 殘留 + 查 remote。詳見 `references/jenkinsfile-codebuild.md` 內兩個 function 的範本。
+
+### 3. K8s `rollout restart` 1-second 限制
+
+`kubectl rollout restart` 本質是給 deployment template 加 annotation `kubectl.kubernetes.io/restartedAt`，**精度只到秒**。1 秒內重複觸發會被 K8s 拒絕。
+
+**症狀**：
+```
+error: failed to create patch for <deployment>: if restart has already been triggered 
+within the past second, please wait before attempting to trigger another
+```
+
+**觸發條件**：
+- Jenkins 同時跑兩個 build（如 `*-feat` push 同時觸發了 `Auto Tag dev` + `Deploy dev tag` 雙 job）
+- 兩個 build 各自的 ansible playbook 幾乎同時抵達 rollout 階段
+
+**修法**（擇一）：
+- 在部署腳本對 `kubectl rollout restart` 加 `sleep 2` 後再執行
+- 或加 retry 機制（失敗 sleep 2s 重試 2–3 次）
+- 或改用 `kubectl patch` 自定義 annotation 並用毫秒精度 timestamp
+
+### 4. nerdctl build → K8s pod 拉不到 image
+
+**症狀**：image build 成功，但 `kubectl get pod` 顯示 `ImagePullBackOff` / `ErrImageNeverPull`。
+
+**根因**：nerdctl 預設用 containerd `default` namespace，但 K8s 只看 `k8s.io` namespace。
+
+**修法**：地端 nerdctl build 必須帶 `NAMESPACE=k8s.io`，或在 Makefile 把 `NAMESPACE ?=` 預設改為 `k8s.io`（限「主要部署場景是地端 nerdctl → K8s」的服務）。docker runtime 不受影響（`docker` 沒有 namespace 概念）。
+
+### 5. CodeBuild buildspec 路徑讀取
+
+CodeBuild 讀 buildspec 有三種來源，**寫死 vs 隨 repo 走** 各有 trade-off：
+
+| 來源 | 行為 | 改路徑要動哪裡 |
+|---|---|---|
+| project source.buildspec（**目前範本採用**）| 寫死在 AWS project | `aws codebuild update-project` |
+| repo 根目錄預設 `buildspec.yml` | CodeBuild 自動找 | 改檔名 / 路徑即可（AWS 無需動）|
+| `start-build --buildspec-override` | Jenkinsfile 動態傳 | 改 Jenkinsfile（AWS 無需動）|
+
+預設用第一種（明確、清晰）；若不希望「改路徑要兩邊同步」可考慮第二/三種。
 
 ---
 

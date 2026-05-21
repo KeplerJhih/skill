@@ -25,6 +25,58 @@
 | Claude Code ≥ 2.1.32 | `claude --version` | 退回 `/doit` |
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` | 看 `settings.json` 的 `env` | 提示用戶開啟 |
 | `.claude/agents/` 存在通用隊友類型（`backend` / `frontend` / `mobile` / `qa` / `code-reviewer`） | `ls .claude/agents/` | 提示用戶補建或退回 `/doit` |
+| 終端環境（cmux / tmux / Claude 原生）spawn backend 可用 | 見下方「🖥️ 終端環境偵測」 | cmux 缺 shim → 停手要用戶重啟；其他環境直接繼續 |
+
+---
+
+## 🖥️ 終端環境偵測（MANDATORY，前置條件後立即執行）
+
+`/team` 的 teammate 是用 Claude Code 內建 spawn 機制建立的，**底層 backend 隨終端環境變化**。Lead 啟動前必須先偵測，三種環境都是合法的 agent team 啟動方式，不需要降級或魔改：
+
+### 偵測指令（一次 Bash 取得三件事）
+
+```bash
+echo "CMUX=${CMUX_AGENT_LAUNCH_KIND:-no}"  # cmux 環境會輸出 "claude"
+echo "TMUX=${TMUX:+yes}"                    # tmux session 內會輸出 "yes"
+which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs 系統）
+```
+
+### 環境矩陣與啟動方式
+
+| 環境 | 偵測訊號 | spawn backend | Lead 行為 |
+|------|---------|--------------|----------|
+| **① cmux**（teams 模式） | `CMUX_AGENT_LAUNCH_KIND=claude` ∧ `which tmux` 路徑含 cmux 暫存目錄（非 `/opt/homebrew/bin/tmux` 等系統路徑） | cmux split（tmux shim 翻譯） | 走標準 4 步流程 |
+| **① cmux**（shim 未就位） | `CMUX_AGENT_LAUNCH_KIND=claude` ∧ `which tmux` 是系統 tmux 路徑 | ❌ spawn 失敗（會建出孤兒 tmux pane） | **立即停手**，依下方「cmux 未就緒復原訊息」回覆用戶 |
+| **② tmux** | 無 `CMUX_*` 變數 ∧ `$TMUX` 非空 | tmux pane | 走標準 4 步流程 |
+| **③ Claude 原生** | 無 `CMUX_*` 變數 ∧ 無 `$TMUX` | Claude Code 內建（依版本而定） | 走標準 4 步流程 |
+
+### cmux 未就緒復原訊息（情況 ①\* 專用）
+
+偵測到「cmux 環境但 tmux shim 未就位」時，**禁止繼續往下走**（會 spawn 出無回應的 teammate），直接回覆用戶：
+
+> ⚠️ **偵測到 cmux 終端，但目前 Claude 不是用 cmux teams 模式啟動。**
+>
+> 證據：
+> - `CMUX_AGENT_LAUNCH_KIND=claude` ✓
+> - `which tmux` = `<實際路徑>`（系統 tmux，非 cmux shim）
+>
+> 在此狀態下 spawn 出的 teammate 不會跑在 cmux session 內，會永遠不回應。請依以下指令重啟：
+>
+> ```bash
+> # 1. 退出當前 Claude（Ctrl+D 或 /exit）
+> # 2. 用 cmux 包裝的 teams 模式重啟並接回原對話
+> cmux claude-teams --continue
+> ```
+>
+> 重啟後 PATH 上會自動有 cmux 的 tmux shim，再下 `/team` 即可正常 spawn teammate。
+
+### 啟動指令對照（供用戶參考）
+
+| 想用 | 啟動方式 |
+|------|---------|
+| cmux + agent team | `cmux claude-teams [--continue]` |
+| 原生 tmux + agent team | 先 `tmux new -s mywork`，內部 `claude` |
+| Claude 原生 agent team | 直接 `claude`（無 tmux / 無 cmux） |
 
 > **隊友類型是語言中立的角色**：`backend` 可能對應 Go / Python / Node / PHP / Ruby / Java / Rust，`frontend` 可能對應 React / Vue / Svelte / Astro 等，`mobile` 可能對應 iOS / Android / RN / Flutter。**實際載入哪個 skill 由隊友自己在啟動時偵測技術棧後動態匹配**，不在這裡寫死。
 
@@ -322,44 +374,6 @@ TeamDelete {}
 
 > ⚠️ **TeamDelete 會在仍有 active teammate 時失敗** — 必須先全部 shutdown。
 > ⚠️ 必須由 Lead 執行清理。Teammate 不應執行清理。每個 session 一次只能管理一個 team，下次任務開始前要先清。
-
----
-
-### 7. Team shutdown 後的 follow-up 紀律(Lead 自己接手寫 code)
-
-team 收尾後常見情境:用戶提小範圍 follow-up(改一個 endpoint / 修一個 UI bug / clean 冗餘),重起一個 team 太重,Lead 直接動手最快。
-
-**這時 Lead 從「調度者」變成「implementer」,但 `/team` 的所有紀律都是 teammate-centric 寫的,沒涵蓋這情境 → Lead 容易憑記憶 / 憑感覺寫,跳過 skill 載入與 references 翻閱。**
-
-**強制 ritual(動 implementation code 之前)**:
-
-1. **判斷範圍**:這個 follow-up 能不能 1 個 Skill 涵蓋?
-   - 是 → Lead 自己做,走下方 ritual
-   - 否(跨多端 + 要 QA / 規模中大) → 重起 team 或 `/doit`
-
-2. **動態選擇 skill 並載入(MANDATORY)**:
-
-   動手前先問自己:「我這次改動有什麼非顯而易見的紀律 / 規範 / 慣例?」
-   - 有 → 從 `ls .claude/skills/` 或 system prompt 的 available-skills 找對應 1-N 個 skill,`Skill` 工具 invoke 載入
-   - **不寫死「目錄 → skill」mapping**:子專案結構會變、同目錄可能多技術棧、新加技術棧時 mapping 會過時。**Lead 看當下要做什麼判斷,不查表**
-   - 範例(僅示意,不是 hardcoded 規則):
-     - 改後端 service / handler / cache → 評估需要該語言對應的 backend skill 與 references(swagger / redis / logging 之類)
-     - 改前端 UI 組件 / 樣式 → 評估前端 skill / design skill
-     - 改 IaC / 容器 / CI → 評估 terraform / k8s / devops skill
-   - **不要因為「我熟」就跳過** — context 長了會忘,特別是子專案累積的踩坑紀錄
-
-3. **讀對應 CLAUDE.md 相關段**(踩坑日誌、設計取捨):
-   - 改子專案 X → grep `<X>/CLAUDE.md` 對應段(認證 / cache / 部署等)
-   - 確認不再踩既有坑
-
-4. **動 code → 跑該專案的 test / smoke / typecheck / build 驗收**(不要憑「我看 diff 覺得 OK」)
-
-5. **改完若有新踩坑 / 新設計取捨,寫進對應 CLAUDE.md**(可走 `/update-md` skill)
-
-**反 pattern(過去踩過)**:
-- ❌「這個 follow-up 範圍很小,skill 不必載」→ 結果寫的代碼跟既有規範細節對不上
-- ❌「我看過 CLAUDE.md,記得內容」→ context 長了會忘,特別是 10+ 條踩坑紀錄
-- ❌ 直接 `Edit` source file 沒先評估「這個改動需要對齊什麼紀律」
 
 ---
 

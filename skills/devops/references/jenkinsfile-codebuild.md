@@ -25,7 +25,12 @@ Git Push / Tag
                                       │
                                       ├── Docker build (make build-xxx)
                                       ├── Docker tag (latest, TAG_NAME, IMAGE_TAG)
-                                      └── Docker push → GCP Artifact Registry
+                                      └── Docker push → Image Registry
+                                              │
+                                              ├── GCP Artifact Registry
+                                              ├── Aliyun ACR
+                                              └── AWS ECR / 其他
+                                          詳見 references/registry/
 ```
 
 ---
@@ -98,11 +103,12 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION         = 'ap-northeast-3'
-        AWS_CREDENTIALS_ID = '545426309786(aws-codebuild)'
-        AWS_ACCOUNT_ID     = '545426309786'
-        AI_ANALYZER_TOKEN  = credentials('ai-analyzer-token')
-        AI_ANALYZER_URL    = 'https://ai-analyzer.nb-dev.pro/analyze'
+        // 以下值依專案 / 組織實際情況填入，**勿沿用範例值**
+        AWS_REGION         = '<aws-region>'                  // 例：ap-northeast-3
+        AWS_CREDENTIALS_ID = '<jenkins-aws-credential-id>'   // Jenkins 內 AWS credentials 的 ID
+        AWS_ACCOUNT_ID     = '<aws-account-id>'              // 12 位數 AWS account
+        AI_ANALYZER_TOKEN  = credentials('<ai-analyzer-token-credential-id>')
+        AI_ANALYZER_URL    = '<ai-analyzer-url>'             // 若無 AI Analyzer 服務，可整段刪除
     }
 
     stages {
@@ -172,10 +178,10 @@ pipeline {
             steps {
                 script {
                     updateDiscordStatus("⏳ 正在將 dev tag 移至最新...")
-                    withCredentials([usernamePassword(credentialsId: 'xg-gitlab-Selfhosting', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                    withCredentials([usernamePassword(credentialsId: '<jenkins-gitlab-credential-id>', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
                         sh """
                             git config --global credential.helper store
-                            echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@gitlab.xgstudio.co" > ~/.git-credentials
+                            echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@<gitlab-host>" > ~/.git-credentials
                             git tag -d dev || true
                             git push origin :refs/tags/dev || true
                         """
@@ -190,14 +196,22 @@ pipeline {
         }
 
         // dev tag → Ansible 部署地端
+        //
+        // ⚠️ Ansible playbook 內若有 `kubectl rollout restart` 步驟，請注意：
+        //   K8s rollout restart 的 annotation timestamp 精度只到秒，
+        //   1 秒內重複觸發會 fail：
+        //     error: failed to create patch ... if restart has already been triggered
+        //     within the past second, please wait before attempting to trigger another
+        //   並發兩個 build（如 *-feat push 同時推 dev tag）會同時抵達 rollout 階段。
+        //   修法：playbook 內對 rollout restart 加 sleep 2 或 retry。
         stage('Deploy dev tag') {
             when { tag 'dev' }
             steps {
                 script {
                     updateDiscordStatus("⏳ 正在部署到地端...")
                     ansiblePlaybook(
-                        playbook: '/data/exec/jenkins/prj/xg_gaming/{product}/local/{name}.yml',
-                        inventory: '/data/exec/jenkins/inventory.ini',
+                        playbook: '<ansible-playbook-path>',   // 例：/data/exec/jenkins/prj/<org>/<product>/local/<name>.yml
+                        inventory: '<ansible-inventory-path>', // 例：/data/exec/jenkins/inventory.ini
                         extraVars: [project_name: prjName, target_hosts: devtargetName]
                     )
                     updateDiscordStatus("✅ 地端部署完成")
@@ -437,38 +451,66 @@ def updateDiscordFinal(color, statusText) {
     }
 }
 
+// ----------------------------------------------------------------------
+// Tag 創建 — 雙保險：無條件清 local 殘留 + 查 remote 是否已存在
+//
+// 踩雷紀錄：原本只查 `git tag -l` 查 local，但 Jenkins SCM 用 `--no-tags`
+// fetch，理論上 local 永遠空 — 但實務上 workspace 可能繼承自舊 repo
+// 或前次手動測試，local 仍有殘留 tag，導致 `git tag X` 直接 fail：
+//   fatal: tag 'X' already exists
+// 修法：每次創 tag 前都 `git tag -d X || true` 清 local；用 ls-remote 查 remote
+// ----------------------------------------------------------------------
+
 def createImmutableTag(version, env) {
     def shortHash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
     def immutableTag = "${version}-${env}-${shortHash}"
-    withCredentials([usernamePassword(credentialsId: 'xg-gitlab-Selfhosting', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+    withCredentials([usernamePassword(credentialsId: '<jenkins-gitlab-credential-id>', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
         sh """
             git config --global credential.helper store
-            echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@gitlab.xgstudio.co" > ~/.git-credentials
-            git tag ${immutableTag}
-            git push origin refs/tags/${immutableTag}
+            echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@<gitlab-host>" > ~/.git-credentials
         """
+
+        // immutable tag 若 remote 已存在 = 同 commit 重跑，直接跳過
+        def existsRemote = sh(
+            script: "git ls-remote --tags origin refs/tags/${immutableTag}",
+            returnStdout: true
+        ).trim()
+        if (existsRemote) {
+            echo "不可變標籤 ${immutableTag} 已存在於遠端（同 commit 重跑），跳過創建"
+            return immutableTag
+        }
+
+        // 清 local 殘留（workspace 可能繼承自舊 repo 或前次手動測試）
+        sh "git tag -d ${immutableTag} || true"
+        sh "git tag ${immutableTag}"
+        sh "git push origin refs/tags/${immutableTag}"
     }
     return immutableTag
 }
 
 def createAndPushTag(version, tagType) {
     def tagName = "${version}-${tagType}"
-    withCredentials([usernamePassword(credentialsId: 'xg-gitlab-Selfhosting', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
-        def tagExists = sh(script: "git tag -l '${tagName}'", returnStdout: true).trim()
-        if (tagExists) {
-            sh "git tag -d ${tagName} || true"
-            sh """
-                git config --global credential.helper store
-                echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@gitlab.xgstudio.co" > ~/.git-credentials
-                git push origin :refs/tags/${tagName} || true
-            """
-        }
-        sh "git tag ${tagName}"
+    withCredentials([usernamePassword(credentialsId: '<jenkins-gitlab-credential-id>', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
         sh """
             git config --global credential.helper store
-            echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@gitlab.xgstudio.co" > ~/.git-credentials
-            git push origin refs/tags/${tagName}
+            echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@<gitlab-host>" > ~/.git-credentials
         """
+
+        // 1. 無條件先清 local 殘留
+        sh "git tag -d ${tagName} || true"
+
+        // 2. 查 remote（不查 local — Jenkins SCM --no-tags fetch 後 local 不可靠）
+        def tagExistsRemote = sh(
+            script: "git ls-remote --tags origin refs/tags/${tagName}",
+            returnStdout: true
+        ).trim()
+        if (tagExistsRemote) {
+            echo "標籤 ${tagName} 在遠端已存在，先刪除遠端舊標籤"
+            sh "git push origin :refs/tags/${tagName} || true"
+        }
+
+        sh "git tag ${tagName}"
+        sh "git push origin refs/tags/${tagName}"
     }
 }
 
@@ -575,30 +617,41 @@ def sendAiAnalyzer(channelList = null) {
 
 ## Buildspec.yml 範本
 
-路徑：`{service-dir}/.devops/codebuild/buildspec.yml`
+路徑：
+- 單服務：`{service-dir}/.devops/codebuild/buildspec.yml`
+- 多服務（多個微服務共用同一個 repo）：`{service-dir}/.devops/codebuild/buildspec-{service}.yml`
 
-### 後端服務（Go）
+### 通用骨架
+
+所有 registry 共用以下結構。**Registry 相關段落（標 `<<<REGISTRY>>>`）依目標 registry 載入對應 reference 取得具體內容**：
 
 ```yaml
 version: 0.2
 
 env:
   secrets-manager:
-    GCP_SA_KEY: gcp_gaming_artifact:GCP_SA_KEY
+    # <<<REGISTRY>>> registry 認證憑證
+    # 依目標 registry 載入對應 reference 取得正確的 secret key 結構：
+    #   - GCP Artifact Registry → references/registry/gcp-artifact-registry.md
+    #   - Aliyun ACR             → references/registry/aliyun-acr.md
+    #   - AWS ECR                → 待補
 
   variables:
-    GCP_REGION: "asia-southeast1"
-    GCP_PROJECT_ID: "january01-487003"
-    GCP_REPO_NAME: "gaming/{product}-backend-go-{service}"  # ← 改這裡
-    SERVICE_NAME: "{service}"                                 # ← 對應 Makefile target
-    XG_ENV: "master"
-    TAG_NAME: ""
-    IMAGE_TAG: ""
+    # <<<REGISTRY>>> registry endpoint / namespace / repo 變數
+    # 依目標 registry 載入對應 reference 取得 endpoint 命名規則
+
+    # 共通變數
+    SERVICE_NAME: "{service}"   # 對應 Makefile target build-{service}
+    TAG_NAME: ""                # 空值，pre_build 階段動態生成
+    IMAGE_TAG: ""               # 空值，由 TAG_NAME + commit hash 自動產生
 
 phases:
   pre_build:
     commands:
-      - echo "$GCP_SA_KEY" | docker login -u _json_key --password-stdin https://${GCP_REGION}-docker.pkg.dev
+      # <<<REGISTRY>>> docker login（依 registry 不同，登入指令不同）
+
+      # 共通：取得版本號（TAG_NAME）
+      # 優先用 version.json，沒有則用 git short hash
       - |
         if [ -z "$TAG_NAME" ]; then
           if [ -f "version.json" ]; then
@@ -607,85 +660,89 @@ phases:
             export TAG_NAME=$(git rev-parse --short=5 HEAD)
           fi
         fi
+
+      # 共通：產生 IMAGE_TAG = TAG_NAME + commit short hash
       - |
         COMMIT_HASH=$(git rev-parse --short HEAD)
         export IMAGE_TAG="${TAG_NAME}-${COMMIT_HASH}"
         echo "IMAGE_TAG: $IMAGE_TAG"
-      - echo "=== 運行參數 ==="
-      - 'echo "GCP_REPO_NAME: $GCP_REPO_NAME"'
-      - 'echo "TAG_NAME: $TAG_NAME"'
-      - 'echo "IMAGE_TAG: $IMAGE_TAG"'
 
   build:
     commands:
-      - make build-${SERVICE_NAME} REPO=${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME
-      - docker tag ${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME:latest ${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME:$TAG_NAME
-      - docker tag ${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME:latest ${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME:$IMAGE_TAG
-      - docker push ${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME:latest
-      - docker push ${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME:$TAG_NAME
-      - docker push ${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME:$IMAGE_TAG
+      # 共通：透過 Makefile build（REPO 完整路徑由 registry 變數組合而成）
+      - make build-${SERVICE_NAME} REPO=<<<REGISTRY-FULL-REPO-PATH>>>
+
+      # <<<REGISTRY>>> docker tag + docker push（endpoint 依 registry 不同）
+      # Tag 策略統一：latest / TAG_NAME / IMAGE_TAG 三個 tag 都推
 
   post_build:
     commands:
       - echo "所有任務完成"
 ```
 
-### 前端服務（帶 Secrets）
+### 三個 Tag 策略（所有 registry 共用）
 
-前端 buildspec 額外需要 VITE 環境變數（從 AWS Secrets Manager 注入）：
+CodeBuild 推送 3 個 tag：
+
+| Tag | 用途 | 範例 |
+|-----|------|------|
+| `latest` | 永遠指向最新建置 | `latest` |
+| `TAG_NAME` | 對應 Git tag | `1.0.0-test` |
+| `IMAGE_TAG` | TAG_NAME + commit hash（唯一不可變） | `1.0.0-test-a1b2c3d` |
+
+### Registry 具體實作
+
+依目標 registry 載入對應 reference 取得完整可用範本（含 secrets-manager 結構、login 指令、endpoint 格式、tag/push 片段）：
+
+| Registry | Reference 檔案 | 適用情境 |
+|----------|---------------|---------|
+| GCP Artifact Registry | `references/registry/gcp-artifact-registry.md` | GKE 部署或跨雲 |
+| Aliyun ACR | `references/registry/aliyun-acr.md` | Aliyun ACK 部署 |
+| AWS ECR | （待補） | AWS EKS / ECS 部署 |
+
+> **跨雲注意**：AWS CodeBuild push 到非 AWS 的 registry（如 → Aliyun ACR / GCP AR）一律走 public endpoint，VPC 內網 endpoint 僅在同雲環境可達。詳見 `references/registry/README.md`。
+
+### 前端服務（帶 VITE Secrets）
+
+前端 buildspec 在通用骨架的 `secrets-manager` 區段額外注入 `VITE_*` 變數，並於 `make build-${SERVICE_NAME}` 指令傳入：
 
 ```yaml
-version: 0.2
-
 env:
   secrets-manager:
-    GCP_SA_KEY: gcp_gaming_artifact:GCP_SA_KEY
-    MASTER_SECRET: gcp_gaming_artifact:MASTER_SECRET
-    KEY_SALT: gcp_gaming_artifact:KEY_SALT
-    # 前端專屬 secrets（對應 AWS Secrets Manager 的 key）
-    VITE_GAME_ID: gcp_gaming_{name}:VITE_GAME_ID
-    VITE_SOCKET_URL: gcp_gaming_{name}:VITE_SOCKET_URL
-    VITE_API_URL: gcp_gaming_{name}:VITE_API_URL
+    # <<<REGISTRY>>> 認證憑證（依 registry 載入對應 reference）
+
+    # 前端額外 secrets
+    MASTER_SECRET: <secret-name>:MASTER_SECRET
+    KEY_SALT: <secret-name>:KEY_SALT
+    VITE_API_URL: <secret-name>:VITE_API_URL
     # ... 其他 VITE_* 變數
 
-  variables:
-    GCP_REGION: "asia-southeast1"
-    GCP_PROJECT_ID: "january01-487003"
-    GCP_REPO_NAME: "gaming/{product}-frontend-{name}"  # ← 改這裡
-    SERVICE_NAME: "prod"
-    XG_ENV: "master"
-    TAG_NAME: ""
-    IMAGE_TAG: ""
-
 phases:
-  pre_build:
-    commands:
-      # 同後端...
-
   build:
     commands:
       - >-
         make build-${SERVICE_NAME}
-        REPO=${GCP_REGION}-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME
+        REPO=<<<REGISTRY-FULL-REPO-PATH>>>
         MASTER_SECRET="$MASTER_SECRET"
         KEY_SALT="$KEY_SALT"
-        VITE_GAME_ID="$VITE_GAME_ID"
-        VITE_SOCKET_URL="$VITE_SOCKET_URL"
         VITE_API_URL="$VITE_API_URL"
-      # tag + push 同後端...
+      # docker tag + push 同後端骨架（依 registry reference 寫具體 endpoint）
 ```
 
 ---
 
 ## 新增專案 Checklist
 
-1. **建立 Jenkinsfile**：複製範本，修改頂部 5 個配置變數
-2. **建立 buildspec.yml**：放在 `{service-dir}/.devops/codebuild/buildspec.yml`
+1. **建立 Jenkinsfile**：複製範本，修改頂部配置區的變數
+2. **選擇 Image Registry**：依部署目標雲決定（GCP AR / Aliyun ACR / AWS ECR），載入對應 `references/registry/<registry>.md`
+3. **建立 buildspec.yml**：放在 `{service-dir}/.devops/codebuild/buildspec.yml`
    - 後端多服務：每個服務一個 `buildspec-{service}.yml`
    - 前端單服務：一個 `buildspec.yml`
-3. **AWS CodeBuild**：在 Console 建立 CodeBuild 專案，命名格式 `gaming-{product}-{layer}-{name}`
-4. **Jenkins**：設定 Multibranch Pipeline 指向 Git repo
-5. **AWS Secrets Manager**：前端專案需建立 `gcp_gaming_{name}` secret 存放 VITE 變數
+4. **AWS CodeBuild**：在 Console 建立 CodeBuild 專案，命名格式依組織慣例（如 `{org}-{product}-{layer}-{name}`）
+5. **Jenkins**：設定 Multibranch Pipeline 指向 Git repo
+6. **AWS Secrets Manager**：
+   - Registry 認證 secret：依 `references/registry/<registry>.md` 的格式建立
+   - 前端專案：額外建立 secret 存放 `VITE_*` 等建置期環境變數
 
 ---
 
@@ -701,7 +758,7 @@ phases:
 
 ## Image Tag 規則
 
-CodeBuild 推送 3 個 tag 到 GCP Artifact Registry：
+CodeBuild 推送 3 個 tag 到目標 Image Registry：
 
 | Tag | 用途 | 範例 |
 |-----|------|------|

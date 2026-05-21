@@ -22,7 +22,12 @@
 # -----------------------------------------------------------------------------
 CR := $(shell command -v docker >/dev/null 2>&1 && echo docker || echo nerdctl)
 
-# nerdctl 需要 -n namespace，docker 不需要
+# nerdctl 需要 -n namespace 來指定 containerd namespace；docker 沒有 namespace 概念。
+# NAMESPACE 預設值依「主要部署場景」決定：
+#   - 純 docker build → push registry → K8s pull：預設 default 即可（docker 不受影響）
+#   - 地端 nerdctl build → K8s pod 直接拉取：建議改預設為 k8s.io
+#     原因：ACK / k3s 上的 K8s 只看 containerd 的 k8s.io namespace，
+#     若 build 進 default，pod 必 ImagePullBackOff。
 NAMESPACE ?= default
 CR_NS = $(if $(filter nerdctl,$(CR)),-n $(NAMESPACE))
 
@@ -201,6 +206,39 @@ build-prod: ## 建置生產環境映像（需指定 REPO）
 
 - **`--build-arg`**：前端如有建置時期需要注入的旗標（如 Mock 開關），透過 `--build-arg` 傳入，而非 `ENV`。
 - **開發 vs 生產**：`build-dev` 啟用 Mock，`build-prod` 關閉 Mock。
+
+---
+
+## Optional：本地預覽 `run` target（含 port 自動偵測）
+
+需要在本地跑容器預覽（前端 SPA / Web API 等）時，可在通用範本基礎上加入 `run` target。
+**避免寫死容器外部 port** — 用 `lsof` 偵測佔用，自動往上找可用 port。
+
+```makefile
+# 本地預覽容器外部 port 預設值；被佔用會自動往上加（10881, 10882, ...）
+DEV_PORT ?= <preferred-dev-port>     # 例：10880
+
+run: ## 運行容器（dev image），port 被佔用自動 +1
+	@$(MAKE) run-check
+	@PORT=$(DEV_PORT); \
+	while lsof -nP -iTCP:$$PORT -sTCP:LISTEN >/dev/null 2>&1; do \
+		echo "$(YELLOW)Port $$PORT 已被占用，嘗試 $$((PORT + 1))$(RESET)"; \
+		PORT=$$((PORT + 1)); \
+	done; \
+	echo "$(GREEN)容器將在 http://localhost:$$PORT 運行（Ctrl+C 停止）$(RESET)"; \
+	$(CR) $(CR_NS) run -it --rm -p $$PORT:<container-port> $(DOCKER_IMAGE_NAME):dev || true
+
+run-check:
+	@if ! $(CR) $(CR_NS) image inspect $(DOCKER_IMAGE_NAME):dev >/dev/null 2>&1; then \
+		echo "$(RED)映像不存在，請先 make build-dev$(RESET)"; exit 1; \
+	fi
+```
+
+**重點**：
+- `DEV_PORT` 用 `?=` 條件賦值，外部可 override：`make run DEV_PORT=12000`
+- `<container-port>` 依服務實際監聽埠號填入（Web SPA Nginx 通常 80 / 8080；後端 API 依 dockerfile EXPOSE）
+- 不寫死 `docker` / `nerdctl`，沿用 `$(CR) $(CR_NS)` 自動偵測
+- 適用情境：服務需要在本地預覽 UI；純 CI/CD build-and-push 服務無需此 target
 
 ---
 
