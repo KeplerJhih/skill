@@ -8,6 +8,8 @@
 |------|------|------|
 | `backend/go/` | Go + Gin 後端，聚合多家免費行情 API | `github.com/KeplerJhih/orua_go` (dev) |
 | `native/ios/orua/` | SwiftUI iOS App | `github.com/KeplerJhih/orua_ios` (dev) |
+| `frontend/landing/` | Vue3 公開官網 / 隱私條款 / Support | `github.com/KeplerJhih/orua_landing` (main) |
+| `frontend/admin/` | Vue3 內部 admin dashboard(owner-only) | — |
 | `devops/docker/` | 本機 infra（Postgres 18 + Redis 8） | — |
 | `.claude/` | Skills / commands / hooks（獨立 git） | — |
 
@@ -52,13 +54,18 @@
 - **字體縮放**：small/normal/large/xlarge（×0.9 ~ ×1.3）長者友善
 - **下拉刷新節流**：可設 5s / 1min / 5min / 10min（iOS + backend 雙層 cache）
 - **報價時間戳**：API 的 `fetched_at` 流向 UI（cache 命中會顯示原始抓取時間，非「剛剛」）
-- **5 語系**：zh / zhCN / en / ja / fr，in-memory 字典
+- **6 語系**：zh / zhCN / en / ja / fr / vi，in-memory 字典
 - **標籤系統**：兩層 tag（Holding + Lot 都可打）、TagDetailView 含「鎖定計入」per-tag toggle
 - **鎖定不計入**：兩層（整 Holding / 單一 Lot），右滑鎖、LockedView 列出
 - **介面模式**：簡約（sheet 設計）vs 經典（iOS 26 Liquid Glass TabView）— 同頁設定 tab 順序與開關
-- **資料備份**：JSON v2 (含 tags) / CSV 匯出 + Import + iCloud Drive 提示（Tier 1）
+- **資料備份**：JSON v2 (含 tags) / CSV 手動匯出 + Import + iCloud Drive 手動備份
+- **iCloud 自動同步**（v2.7）：走 ubiquity container 跨裝置自動同步,設定 → Vault & Sync 啟用;衝突 sheet 讓 user 選邊,備份 conflict 檔留本機
 - **設定頁補完**：Categories 隱藏子分類 / About / Local vault 詳情
 - **分類順序與顯示**（2026-05）：頂層 5 分類 + 投資 6 子分類皆可拖曳排序 + Toggle 顯示;設定「清單與排序」為入口;主要分類至少留 1 個（防呆 shake + 警示淡入）;舊 `hiddenInvestmentSubs` 一次性 migrate 到新 `investSubConfig`
+- **主功能 Menu + 統計模塊**（2026-05-17）：左上 Logo 點擊展開 `MainMenuSheet`，集中「標籤 / 鎖定 / 統計」三入口（右上設定 gear 不變）；經典模式新增 `.stats` tab 可拖序開關；`Features/Stats/` 4 個 tab × 12 張卡片，純函式集中在 `Core/Helpers/StatsCalculator.swift`
+- **應收 / 負債事件流**（v2.9）：`Holding` 加 `principal / payments[] / recurring / settled` 4 欄,只對 receivable / debt 生效。`Features/Liability/` 完整 DetailSheet + RecurringCard + InlinePaymentBar。RecurringPlan 頻率改日 / 週 / 月 / 年,settleable alert 補開放式末段超額靜默 autoSettle 黑箱
+- **SideDrawer + 邊緣手勢**（v2.9）：左 MainMenu(Logo / 左滑入)+ 右 Settings 雙入口分流(gear tap = 全屏 sheet / 右滑入 = 側板 drawer)。`Core/DesignSystem/SideDrawer.swift` 通用元件,`Core/Extensions/View+EdgeSwipe.swift` 包 UIKit `UIScreenEdgePanGestureRecognizer`(自帶 cancelsTouchesInView)
+- **UIModeView 全域 sheet**（v2.9）：AppRootView 層 `.sheet`,切 mode 觸發 rootContent swap 時 sheet 不被拆,user 可連續切 mode 繼續調整 tab 順序
 
 ## 端點速覽
 
@@ -67,7 +74,9 @@
 | GET  | `/health` | ❌ |
 | POST | `/api/v1/auth/device` | ❌ |
 | POST | `/api/v1/auth/register` / `/login` | ❌ |
-| POST | `/api/v1/auth/upgrade`（匿名 → 實名） | ✅ |
+| POST | `/api/v1/auth/upgrade`(匿名 → 實名) | ✅ |
+| POST | `/api/v1/auth/change-password` | ✅ |
+| GET  | `/api/v1/admin/stats`(admin only) | ✅ admin |
 | GET  | `/api/v1/markets` | ❌ |
 | GET  | `/api/v1/quotes` / `/quotes/batch` | ✅ |
 | GET  | `/api/v1/symbols` / `/fx/rates` | ✅ |
@@ -117,6 +126,20 @@ open native/ios/orua/orua.xcodeproj
 **支援場景**：日圓買美股 / 台幣買 BTC / USDT 買 SOL / 港股 / 韓元/英鎊/新加坡幣等使用者本國幣記帳。
 
 詳見 `backend/go/CLAUDE.md` 的「HK market」段與 `native/ios/orua/CLAUDE.md` 的「多幣別 Cost Basis」段。
+
+## Admin Dashboard(2026-05-16 新增)
+
+內部 owner-only 監控站,**不對外、不放給 user 看**。三件支柱:
+
+1. **Backend `/api/v1/admin/stats`**:5 個 collector errgroup 並行(users / devices / quotes / query_freq / active),整體 response cache 30s + singleflight 防擊穿。Active block 由 `ENABLE_ACTIVITY_TRACKING=true` 啟用 `RecordActivity` middleware 寫 Redis,提供真實 DAU / WAU / MAU / Online5min / Retention D1/D7/D30 / 24h heatmap。flag off 時整塊 `omitempty` 不出現,iOS-only 場景仍向後相容。
+
+2. **Frontend `frontend/admin/`(新 Vue3 站)**:獨立站對齊 landing 的 OKLCH design token,三分頁(總覽 / 使用者 / 報價)切 tab 不換頁、共用單一 stats reactive,輪詢 10s 可切 30s/暫停。Email dropdown 含「變更密碼」+「登出」入口,變更後強制 logout + redirect `/login?changed=1` 顯示綠色提示(柔性吊銷,不引入 token blacklist 複雜度)。容器化跟 landing 100% 同 pattern:`.devops/dockerfile` + `nginx.conf` + `Makefile`(ECR `orua/admin:{latest,sha}`,linux/arm64,**前端容器統一 nginx :8080**,vite dev 5174 避撞 landing;同源 reverse proxy 模式見 `.claude/skills/frontend/references/api-proxy-pattern.md`)。
+
+3. **隱私紅線(契約 §0)**:`device_id` 永遠回尾 4 碼、`email`/`password_hash`/holdings 完全不出現在 admin response。`team/contracts/admin-dashboard.api.md` 為單一 source of truth,`team/decisions/admin-dashboard.log.md` 紀錄 13+ 條設計取捨,`team/reviews/admin-dashboard.review.md` cr-admin 完整審查(220 行,0 BLOCKER)。
+
+**對 iOS 完全 zero impact**:所有改動是 additive(新 endpoint / response 多欄位 / middleware 透明掛 / 內部優化),Swift Codable 預設忽略 unknown key,backend 單獨部署不必動 iOS。
+
+詳見 `backend/go/CLAUDE.md` 的「Admin dashboard」+「RecordActivity」段、`frontend/admin/CLAUDE.md`。
 
 ## CLAUDE.md 維護方針
 
