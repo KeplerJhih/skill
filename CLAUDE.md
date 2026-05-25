@@ -1,6 +1,7 @@
 # Orua — 記帳 App（Monorepo）
 
 個人記帳 app，iOS 端 + Go 後端 monorepo。**核心原則：API 只提供價格，使用者資料全部在手機內。**
+角色定位： 你現在是一個盡責的全端兼PM，做錯事或者寫錯代碼就勇於承認錯誤，不要硬凹用替代方案。
 
 ## 倉庫分佈
 
@@ -66,6 +67,8 @@
 - **應收 / 負債事件流**（v2.9）：`Holding` 加 `principal / payments[] / recurring / settled` 4 欄,只對 receivable / debt 生效。`Features/Liability/` 完整 DetailSheet + RecurringCard + InlinePaymentBar。RecurringPlan 頻率改日 / 週 / 月 / 年,settleable alert 補開放式末段超額靜默 autoSettle 黑箱
 - **SideDrawer + 邊緣手勢**（v2.9）：左 MainMenu(Logo / 左滑入)+ 右 Settings 雙入口分流(gear tap = 全屏 sheet / 右滑入 = 側板 drawer)。`Core/DesignSystem/SideDrawer.swift` 通用元件,`Core/Extensions/View+EdgeSwipe.swift` 包 UIKit `UIScreenEdgePanGestureRecognizer`(自帶 cancelsTouchesInView)
 - **UIModeView 全域 sheet**（v2.9）：AppRootView 層 `.sheet`,切 mode 觸發 rootContent swap 時 sheet 不被拆,user 可連續切 mode 繼續調整 tab 順序
+- **投資出售方案**（v3.0, 2026-05-25）：HoldingLotsSheet 底部 sticky bar 「↗ 售出」入口 → `SellHoldingSheet`(售價 + 「使用當前報價」shortcut + `SellLotPickerSheet` 逐 lot 填股數 + deposit picker 選 liquid 入帳)+ 方案預覽 + 公式 ⓘ popover(三段 FORMULA / FEE BREAKDOWN / NOTES)。執行扣股 + `LedgerStore.creditAmount` native-first 跨幣換算入 liquid + toast「已存入 X 到 Y」。買入 fee 按 `lot.fee × (sharesSold / lot.shares)` 攤入成本,`executeSell` 同步縮 lot 殘餘 fee。詳見 `native/ios/orua/CLAUDE.md` 的「投資出售方案」段(含 8 個踩雷紀錄)
+- **Home / Stats 收尾**(v3.0, 2026-05-25):`Holding.updatedAt` 新欄位 + `LedgerStore.stampUpdated` 機制(15+ 處 user mutation 自動 stamp,quote 刷新 / replaceAll 明確不 stamp);AccordionDrawer 非 tradable row 副標 fallback(note → updatedAt → firstPurchaseAt);投資 sub-group(基金 / 台股 / 美股)獨立 collapse 含手風琴垂直壓縮動畫(`maxHeight 9999↔0 + .clipped()` trick 而非 `.move(edge:)`);Stats 損益分頁 B1 hero 改 3 欄(今日損益 / 累積損益 / 股票市值),`StatsCalculator.todayPnL` 公式 `Σ (q − prev) × shares × FX`。詳見 `native/ios/orua/CLAUDE.md` 「Home / Stats 收尾」段
 
 ## 端點速覽
 
