@@ -105,6 +105,7 @@ open native/ios/orua/orua.xcodeproj
 - **Backend**：Docker image `keplerjhih/orua_go:uat`，部署到 `api.orua.app`
 - **Compose log rotation**：10MB × 10 檔（上限 ~100MB）
 - **DB_AUTO_MIGRATE=true**：新 DB 部署時 server 自動建表
+- **容器時區 `TZ=Asia/Taipei`**（compose `environment:`，app + fetcher 都設）：讓 Go `time.Local` 與 `DB_TIMEZONE` 一致，DAU / new_today 同台北日界。**不設則 alpine 預設 UTC** → DAU 在台北早上 8 點才換日、且跟 PG 端 new_today（台北午夜）對不上。`DB_TIMEZONE` 只進 PG DSN、管不到 Go 時鐘
 
 ## 開發規範（skill）
 
