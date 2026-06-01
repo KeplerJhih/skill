@@ -69,6 +69,7 @@
 - **UIModeView 全域 sheet**（v2.9）：AppRootView 層 `.sheet`,切 mode 觸發 rootContent swap 時 sheet 不被拆,user 可連續切 mode 繼續調整 tab 順序
 - **投資出售方案**（v3.0, 2026-05-25）：HoldingLotsSheet 底部 sticky bar 「↗ 售出」入口 → `SellHoldingSheet`(售價 + 「使用當前報價」shortcut + `SellLotPickerSheet` 逐 lot 填股數 + deposit picker 選 liquid 入帳)+ 方案預覽 + 公式 ⓘ popover(三段 FORMULA / FEE BREAKDOWN / NOTES)。執行扣股 + `LedgerStore.creditAmount` native-first 跨幣換算入 liquid + toast「已存入 X 到 Y」。買入 fee 按 `lot.fee × (sharesSold / lot.shares)` 攤入成本,`executeSell` 同步縮 lot 殘餘 fee。詳見 `native/ios/orua/CLAUDE.md` 的「投資出售方案」段(含 8 個踩雷紀錄)
 - **Home / Stats 收尾**(v3.0, 2026-05-25):`Holding.updatedAt` 新欄位 + `LedgerStore.stampUpdated` 機制(15+ 處 user mutation 自動 stamp,quote 刷新 / replaceAll 明確不 stamp);AccordionDrawer 非 tradable row 副標 fallback(note → updatedAt → firstPurchaseAt);投資 sub-group(基金 / 台股 / 美股)獨立 collapse 含手風琴垂直壓縮動畫(`maxHeight 9999↔0 + .clipped()` trick 而非 `.move(edge:)`);Stats 損益分頁 B1 hero 改 3 欄(今日損益 / 累積損益 / 股票市值),`StatsCalculator.todayPnL` 公式 `Σ (q − prev) × shares × FX`。詳見 `native/ios/orua/CLAUDE.md` 「Home / Stats 收尾」段
+- **付費頁 + 入口橫幅**（v3.x, 2026-05-31）：`Features/Premium/PaywallView.swift` 照設計稿 `ios_app/ios 收費設計稿.pen` 1:1 還原的 Premium paywall（**固定深色**，不跟 App 主題）；設定頁頂 **`#if DEBUG` 橫幅**入口 `.fullScreenCover` 跳出。**目前 UI-only、StoreKit 待接**（購買 / 恢復彈占位 alert、價格寫死 `NT$60/390/990`、條款 / 隱私連 `orua.app`）。三方案可點選切換、CTA 文案隨選中變；footer 長語系用 `ViewThatFits` 退垂直三行。詳見 `native/ios/orua/CLAUDE.md`「付費頁」段
 
 ## 端點速覽
 
