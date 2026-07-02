@@ -53,6 +53,8 @@ SwiftUI 表單的「收鍵盤」與「輸入框可點性」沉澱成三個**零 
 
 共用 dismiss 手法：一律 `window.endEditing(true)`（對整個 window 強制收），比 `sendAction(resignFirstResponder)` 可靠，且連 SwiftUI `@FocusState` 也會清（backing 仍是 UIKit responder）。
 
+⚠️ **tap 手勢必須掛 window、不能掛 `background` 局部 view**：`Form`/`List`（UICollectionView）會把空白處的 touch 全部吃掉，touch 到不了 background 層的 recognizer → 點空白收在 Form 型 sheet **完全無效**（ScrollView/VStack 型 sheet 不會踩，所以容易漏測）。`View+KeyboardDismiss.swift` 的 `TapProxyView` 已改為 `didMoveToWindow` 時把 recognizer 掛到 window（ancestor 收得到所有 descendant 的 touch）、離開 window 自動移除；delegate 過濾（跳過 UITextField/UITextView、simultaneous）不變。
+
 ---
 
 ## 2. 玻璃半圓拉柄（Mode 4 / KeyboardDismissDome）— 為什麼這樣做

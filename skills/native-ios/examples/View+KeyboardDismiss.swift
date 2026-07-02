@@ -50,24 +50,34 @@ extension View {
 // MARK: - Internal: tap-outside coordinator
 
 private struct KeyboardDismissTapView: UIViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = TapProxyView()
         view.backgroundColor = .clear
-        let tap = UITapGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handleTap)
-        )
-        tap.cancelsTouchesInView = false   // 不吃掉 tap，Button/chip 照常運作
-        tap.delegate = context.coordinator
-        view.addGestureRecognizer(tap)
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {}
 
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+    /// 手勢必須掛在 **window** 而非本 background view：`Form`/`List`（UICollectionView）
+    /// 會把空白處的 touch 全部吃掉，touch 到不了 background 層的 recognizer（ScrollView/VStack
+    /// 型 sheet 不會踩、Form 型必踩）；掛 window（所有 view 的 ancestor）才收得到。
+    /// 隨 view 進出 window 自動掛載 / 移除。
+    final class TapProxyView: UIView, UIGestureRecognizerDelegate {
+        private var tap: UITapGestureRecognizer?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            // 離開舊 window（sheet 關閉）→ 從舊 window 移除，避免殘留
+            if let tap { tap.view?.removeGestureRecognizer(tap) }
+            self.tap = nil
+            guard let window else { return }
+            let g = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+            g.cancelsTouchesInView = false   // 不吃掉 tap，Button/chip 照常運作
+            g.delegate = self
+            window.addGestureRecognizer(g)
+            tap = g
+        }
+
         @objc func handleTap() {
             // endEditing(true) 對整個 window 強制收，連 SwiftUI 內部的
             // FocusState 也會跟著清（因為它 backing 還是 UIKit responder）。
