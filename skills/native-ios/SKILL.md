@@ -147,6 +147,7 @@ color: blue
 - **View 拆分**：當 `body` 超過 50 行或層級過深時，請拆分為小的子 View 或 Component。
 - **預覽 (Previews)**：為每個 View 提供 `PreviewProvider`，並注入假資料以便快速迭代。
 - **修飾符 (Modifiers)**：重複的樣式應封裝為自定義 ViewModifier。
+- **收鍵盤 & 可編輯輸入框**：表單的收鍵盤（點空白 / 玻璃半圓拉柄）與「明顯可編輯」輸入框已有通用元件，**新表單一律沿用、勿手刻**。三個**零 design-system 依賴、可 drop-in 任何 SwiftUI 專案**的源檔在 `examples/`（`KeyboardDismissDome.swift` / `View+KeyboardDismiss.swift` / `EditableFieldStyle.swift`）；安裝三步、解耦對照表、決策矩陣、Liquid Glass dome 的踩坑、`.contentShape` 不等於 focus 的陷阱，全見 `references/keyboard-and-input-patterns.md`。
 
 ### 6. 錯誤處理
 - ViewModel 應包含一個 `errorMessage` 或 `alertItem` 的 `@Published` 屬性。
