@@ -1,3 +1,8 @@
+---
+description: Design Developer workflow — 依設計稿實作前端（frontend + frontend-design skill）
+argument-hint: [設計稿路徑或需求]
+---
+
 # Command: /design-dev (Design Developer Workflow)
 
 此指令用於啟動 **設計驅動開發流程**。結合 Pencil MCP 設計工具與 `frontend-design` Skill 美學指南，從視覺設計到代碼實作一條龍完成。
@@ -231,12 +236,12 @@
 
 **⚠️ 此階段必須在階段二確認後才能開始。**
 
-1. **激活 `frontend-development` Skill**（MANDATORY）：
-   使用 `Skill tool` 載入 `frontend-development`，遵循 React/TypeScript/Tailwind 實作規範。
+1. **激活 `frontend` Skill**（MANDATORY）：
+   使用 `Skill tool` 載入 `frontend`，遵循 React/TypeScript/Tailwind 實作規範。
 
 2. **依設計稿實作**：
    - 在 `frontend/main/src/` 下建立或修改對應檔案。
-   - 依照 `frontend-development` Skill 的目錄結構：
+   - 依照 `frontend` Skill 的目錄結構：
      - 頁面 → `pages/`
      - 原子元件 → `components/ui/`
      - 佈局元件 → `components/layout/`

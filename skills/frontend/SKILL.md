@@ -1,5 +1,6 @@
 ---
-name: frontend-development
+name: frontend
+version: 1.0.0
 description: 構建可擴展、高效能且可維護的 React/TypeScript 前端應用程式指南。特別強調 RWD 回應式設計、佈局穩定性與多端操作體驗。
 color: green
 ---

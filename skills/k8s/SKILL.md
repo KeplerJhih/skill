@@ -11,6 +11,10 @@ description: >-
   "helm lint", "helm values", "fix helm", "helm failed", "helm debug", editing values*.yaml
   or Chart.yaml files, or troubleshooting Helm deployment failures. When Helm is involved,
   always consult references/helm-patterns.md (especially Common Pitfalls section) before making changes.
+  Also triggered when connecting to or switching clusters: "connect to a cluster", "switch context",
+  "switch kubeconfig", "set KUBECONFIG", "kubectl config use-context", "連線叢集", "切換叢集",
+  "kubeconfig 管理" — in which case follow Step 0 (Cluster Connection / Kubeconfig) and use the
+  `switch` (kubeswitch) tool before running any live-cluster command.
 version: 0.1.0
 ---
 
@@ -32,6 +36,45 @@ Generate, manage, and review Kubernetes manifests, Helm charts, and Kustomize ov
 ---
 
 ## Workflow
+
+### Step 0: Cluster Connection / Kubeconfig (MANDATORY before any live-cluster command)
+
+Any command that touches a live cluster — `kubectl`, `helm install/upgrade`, `kubectl apply` — requires an explicit, confirmed cluster selection first. Never rely on the implicit merged `~/.kube/config` default context, and never assume which cluster is active.
+
+**統一存放位置** — Store every kubeconfig under `$HOME/.kube/configs/`, one file per cluster (many clusters → many files, hence the plural `configs/`). Each file must end in `.yaml` so the `switch` store matches it (`kubeconfigName: "*.yaml"`).
+
+**命名規則** — `<集群帳號>-<gke集群名稱>.yaml`:
+- **集群帳號** — cloud account / GCP project / environment identity.
+- **gke集群名稱** — the real cluster name from `gcloud container clusters list`.
+
+實際範例（`$HOME/.kube/configs/`）：
+
+```
+gke-january01-487003-asia-southeast1-gke-gaming.yaml   # GKE: <gcp-project>-<region>-<cluster>
+aliyun-aquawin.yaml                                    # 其他雲沿用 <帳號>-<叢集>.yaml
+asm-aquawin-uat.yaml
+onprem-105.yaml
+```
+
+**連線統一透過 `switch`（kubeswitch / switcher）** — Never `export KUBECONFIG` by hand. The `switch` tool is already installed (`~/.zshrc` has `source <(switcher init zsh)`); its store is `~/.kube/switch-config.yaml` (`kind: filesystem`, paths → `~/.kube/configs`):
+
+```bash
+switch            # fuzzy 選單，列出 configs/ 內所有叢集 context
+switch gaming     # 以關鍵字過濾
+# 選定後印出 "switched to context <name>"，並把 KUBECONFIG 指向該檔
+```
+
+**連線後、執行 live 指令前**（尤其 `apply` / `helm upgrade` 等寫入類），打印目標再確認：
+
+```bash
+kubectl config current-context
+kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}{"\n"}'
+kubectl config view --minify -o jsonpath='{..namespace}{"\n"}'
+```
+
+Confirm context / server / namespace before proceeding. This gate is mandatory for every live-cluster command (read or write).
+
+新增叢集：把 kubeconfig 放進 `$HOME/.kube/configs/`，依命名規則存成 `<集群帳號>-<gke集群名稱>.yaml`，`switch` 會自動偵測，無需改設定。
 
 ### Step 1: Understand Requirements
 
@@ -185,12 +228,12 @@ All resources follow: `{project}-{service}-{env}`
 
 ```yaml
 metadata:
-  name: xg-gaming-api-prod
-  namespace: xg-gaming-prod
+  name: acme-shop-api-prod
+  namespace: acme-shop-prod
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/instance: api-prod
-    app.kubernetes.io/part-of: xg-gaming
+    app.kubernetes.io/part-of: acme-shop
     app.kubernetes.io/managed-by: helm  # or kubectl
 ```
 
@@ -204,7 +247,9 @@ metadata:
 - **No secrets in manifests** — Use ExternalSecrets, SealedSecrets, or cloud-native secret managers. Plain Secret manifests must reference external sources.
 - **Image pull policy** — Use `IfNotPresent` for tagged images, `Always` only for mutable tags (which should be avoided).
 - **Graceful shutdown** — Set `terminationGracePeriodSeconds` to match application drain time. Handle `SIGTERM`.
-- **Pod topology** — Use `topologySpreadConstraints` or `podAntiAffinity` to spread across nodes/zones.
+- **Pod topology & HA** — Use `topologySpreadConstraints` to spread replicas across nodes/zones. `minReplicas: 2` + PDB alone is only *half* HA — replicas can still co-locate on one node, so a single node failure takes the service to zero. Soft (`ScheduleAnyway`) reliably spreads across nodes but NOT across AZs; use hard (`DoNotSchedule`) on the zone key for guaranteed AZ HA. See `references/hpa-ha-pitfalls.md`.
+- **HPA correctness (mesh-aware)** — With an injected sidecar, scale on `type: ContainerResource` targeting the app container, not `Resource` (whole-pod utilization is diluted by the sidecar's request → HPA scales up late). Do not use memory as a scale signal for Go/JVM services (heap is not returned to the OS → replicas pin high and never scale down); keep memory as an OOM `limit` instead. See `references/hpa-ha-pitfalls.md`.
+- **Confirm the target cluster first** — Never touch a live cluster without selecting it via `switch` and confirming the printed context/server/namespace (Step 0). No ad-hoc `export KUBECONFIG`.
 
 ---
 
@@ -217,3 +262,4 @@ For detailed templates and checklists, consult:
 - **`references/security-checklist.md`** — Security audit checklist for K8s manifests (SecurityContext, NetworkPolicy, RBAC, image scanning)
 - **`references/resource-sizing.md`** — Resource requests/limits sizing guide by workload type and cloud provider recommendations
 - **`references/helm-patterns.md`** — Helm chart patterns, helpers, and values structure conventions
+- **`references/hpa-ha-pitfalls.md`** — HPA correctness (`ContainerResource` vs `Resource` with sidecars, memory-metric caveat) and HA spread (`topologySpreadConstraints` soft vs hard, node vs AZ); read before enabling HPA or claiming a workload is HA

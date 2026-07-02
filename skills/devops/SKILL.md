@@ -1,5 +1,5 @@
 ---
-name: devops-development
+name: devops
 description: 當使用者要求「將專案容器化」、「建立 Dockerfile」、「設定 docker-compose」、「新增 Docker 支援」、「建立 .dockerignore」、「建置 Docker 映像」、「建立 Makefile」、「設定 CI/CD」、「建立部署管線」或需要有關多階段 Docker 建置、容器編排、CI/CD 管線或使用 Docker 進行生產部署的指導時，應使用此技能。
 version: 1.0.0
 ---
@@ -77,7 +77,25 @@ tree -L 3 -I 'node_modules|vendor|.git|__pycache__|dist|build|.next' {project-di
 6. **環境變數用法**：掃描 `.env.example`、`.env.sample` 或程式碼中的環境變數引用，了解配置需求
 7. **CI/CD 配置**：檢查是否已有 `.github/workflows/`、`.gitlab-ci.yml`、`Jenkinsfile` 等 CI/CD 配置
 
-#### 1d. 回報掃描結果並等待確認
+#### 1d. 目錄命名合規性檢查（MANDATORY）
+
+掃描完成後，**必須**比對現有目錄/檔案命名是否符合本 Skill 的輸出規格：
+
+| 規範路徑 | 常見偏差 | 處理方式 |
+|----------|---------|---------|
+| `.devops/` | `devops/`（無點前綴） | 改名為 `.devops/` |
+| `.devops/dockerfile` | `Dockerfile`、`dockerfile-prod` | 視情況保留或重命名 |
+| `.devops/exec/autoversion/` | `devops/tools/autoversion/` | 改名至規範路徑 |
+
+**改名操作規則**：
+1. **全專案全量搜尋**：對**整個專案根目錄**（非僅服務目錄）執行 `grep -r "舊名稱"` — **不可限定檔案類型**。改名影響範圍包含但不限於：
+   - 服務內部：Makefile、dockerfile（`COPY`/`ADD`）、.dockerignore
+   - 服務外部：根目錄部署腳本（`devops_*.sh`）、docker-compose.yml、CI/CD 配置（`buildspec.yml`、`.github/workflows/`、`.gitlab-ci.yml`）、其他服務的交叉引用
+2. **列出所有引用**：在藍圖中明確列出**所有**需要同步更新的檔案與行號（含服務外部檔案）
+3. **改名後驗證**：再次對整個專案根目錄全量搜尋舊名稱，確認零殘留（已註解的行可忽略）
+4. **建置驗證**：改名後必須執行 `make build-dev` 確認建置正常
+
+#### 1e. 回報掃描結果並等待確認
 
 將掃描結果以表格形式回報用戶，**必須等待用戶確認後**才進入步驟 2：
 
@@ -89,7 +107,15 @@ tree -L 3 -I 'node_modules|vendor|.git|__pycache__|dist|build|.next' {project-di
 | 1 | backend/go/ | Go | 1.23 | 8080 | /health | 無 | 無 |
 | 2 | frontend/web/ | Vite + React | Node 20 | 3000→80 | N/A | 已存在 | 已存在 |
 
-需要建立的檔案：
+## 命名合規性檢查
+
+| 現有路徑 | 規範路徑 | 需改名 | 受影響檔案數 |
+|----------|---------|--------|-------------|
+| backend/go/devops/ | backend/go/.devops/ | ✅ | 3（Makefile, dockerfile, ci.yml） |
+| frontend/web/.devops/ | frontend/web/.devops/ | ❌ 已合規 | — |
+
+需要建立/調整的檔案：
+- [ ] backend/go/devops/ → 改名為 .devops/（含同步更新 3 個引用）
 - [ ] backend/go/.devops/dockerfile
 - [ ] backend/go/.dockerignore
 - [ ] backend/go/Makefile（含完整 Docker + CI/CD 目標）
@@ -325,6 +351,7 @@ build-{sub-service}: ## 建置 {sub-service} Docker 映像（需指定 REPO）
 - **檢查映像大小**：編譯型語言（Go/Rust）後端 < 50MB，直譯型語言後端 < 200MB，前端 < 50MB。
 - **掃描安全漏洞**：使用 `docker scout` 或 `trivy`。
 - **避免覆蓋**：若步驟 1c 偵測到已有 dockerfile 或 docker-compose，應先比對差異，詢問用戶是更新還是略過。
+- **改名必須全專案全量掃描**：任何目錄或檔案改名操作，必須對**整個專案根目錄**（非僅服務目錄）執行無檔案類型限制的全量搜尋（`grep -r "舊名稱" {project-root}/`），因為引用可能存在於服務外部（根目錄部署腳本、CI/CD buildspec、docker-compose、其他服務的交叉引用等）。找出所有引用並一併更新，改名後再次全量搜尋確認零殘留，最後 `make build-dev` 驗證建置。
 
 ---
 

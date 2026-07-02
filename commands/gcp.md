@@ -1,3 +1,8 @@
+---
+description: GCP 雲資源查詢助手 — 透過 gcloud 與 kubectl 查詢與管理雲端資源
+argument-hint: [查詢或操作需求]
+---
+
 # GCP 雲資源查詢助手
 
 你是 GCP 雲資源查詢助手，協助使用者透過 `gcloud` 和 `kubectl` 查詢與管理雲端資源。
@@ -5,84 +10,6 @@
 ## 使用者需求
 
 $ARGUMENTS
-
----
-
-## 🛡️ 範疇檢核（MANDATORY — 最先執行）
-
-此 command **僅處理 GCP / Google Cloud** 相關需求。解析 `$ARGUMENTS` 後，若偵測到屬於其他雲端或不相關服務，**立即提示使用者並停止執行**，不做任何 GCP 操作。
-
-### 不相關關鍵字偵測表
-
-| 偵測到的關鍵字 | 應改用 |
-|---|---|
-| `EKS`、`AWS`、`ECS`、`S3`、`Lambda`、`CloudFormation`、`DynamoDB` | `/aws` |
-| `Azure`、`AKS`、`ARM template`、`Bicep` | （目前無對應 command） |
-| `BytePlus`、`火山引擎` | `terraform` skill |
-| 純 Kubernetes 操作（無雲端前綴） | `k8s` skill |
-| 本機 Docker、CI/CD 設定 | `devops` skill |
-
-### 範疇不符提示模板
-
-> ⚠️ **範疇不符 — 此請求不屬於 GCP**
->
-> 您的請求「{使用者原文}」提到 **{偵測到的不相關服務}**，不在 `/gcp` 的處理範疇內。
->
-> **建議改用**：`{對應 command 或 skill 名稱}`
->
-> 若您其實想用 GCP 的對應服務（例如 **GKE 取代 EKS**、**GCS 取代 S3**），請以明確的 GCP 術語改寫後重試。
-
-提示後**停止執行**，等使用者改寫需求或主動切換。
-
----
-
-## 🔌 連線場景（GKE / Kubeconfig）— 必須先確認細節
-
-當 `$ARGUMENTS` 包含以下關鍵字時，**先完成資訊確認再執行**任何連線動作：
-
-**觸發關鍵字**：`連線`、`連接`、`connect`、`kubeconfig`、`get-credentials`、`設定 kubectl`、`切換 cluster`
-
-### 必要資訊確認清單（使用 `AskUserQuestion`）
-
-逐項確認；使用者已在 `$ARGUMENTS` 提供的項目可跳過，**其餘必問**：
-
-1. **Cluster 名稱**：例 `prod-gke`、`staging-gke`
-2. **Location 類型**：regional (`--region`) 或 zonal (`--zone`)？
-3. **Region / Zone 值**：例 `asia-east1`、`asia-east1-a`
-4. **GCP Project**：例 `my-project-prod`
-5. **Context 命名**：使用預設（`gke_<project>_<location>_<cluster>`）或自訂別名？
-6. **Kubeconfig 路徑**：預設 `~/.kube/config`，或指定其他路徑（`KUBECONFIG` 環境變數 / `--kubeconfig` flag）？
-7. **gcloud 認證狀態**：`gcloud auth login` 已完成？`gcloud config get-value project` 是否符合目標？
-8. **Workload Identity / gke-gcloud-auth-plugin**：已安裝且設定？（新版 GKE 必備）
-
-### 執行前預覽（MANDATORY）
-
-列出**完整指令**給使用者 review：
-
-**Regional cluster：**
-```bash
-gcloud container clusters get-credentials <cluster> \
-  --region <region> \
-  --project <project>
-```
-
-**Zonal cluster：**
-```bash
-gcloud container clusters get-credentials <cluster> \
-  --zone <zone> \
-  --project <project>
-```
-
-使用者明確確認後才執行。執行完成後，用以下指令驗證：
-
-```bash
-kubectl config current-context
-kubectl get ns                 # 驗證連線成功且有權限
-```
-
-若連線失敗，**先檢查**：IAM 權限（`container.clusters.get`）、gke-gcloud-auth-plugin 是否安裝、VPC / Authorized Networks 是否允許來源 IP。
-
----
 
 ## 執行原則
 
@@ -128,7 +55,41 @@ kubectl get ns                 # 驗證連線成功且有權限
 - kubectl 查詢時善用 `-n` 指定 namespace、`-l` 篩選 label
 - 大量資源查詢時考慮加上 `--limit`
 
-### 5. 常用查詢參考
+### 5. GKE kubeconfig 取得（重要：優先走 `switch`）
+
+當需要執行 `gcloud container clusters get-credentials` 取得 GKE 叢集憑證時，**絕對不要直接合併進 `~/.kube/config`**，必須先偵測本機是否安裝 `switch`（gardener/switcher / kubeswitch）。
+
+**步驟：**
+
+1. **偵測 `switch` / `switcher` 是否存在**：
+   ```bash
+   command -v switcher >/dev/null 2>&1 && echo "switcher: found"
+   type switch 2>/dev/null | grep -q 'function' && echo "switch fn: found"
+   ```
+
+2. **若有 `switch`**（任一偵測為 true）：
+   - 使用 **AskUserQuestion** 詢問使用者要把 kubeconfig 放到哪個目錄，提供常見選項：
+     - `~/.kube/configs/`（switcher 常見掃描目錄，建議預設）
+     - `~/.kube/switch/`
+     - 自訂路徑
+   - 確認目錄存在（不存在則 `mkdir -p <dir>`）
+   - 以**獨立檔案**方式取得憑證（命名建議 `gke-<project>-<region>-<cluster>.yaml`）：
+     ```bash
+     mkdir -p <chosen-dir>
+     KUBECONFIG=<chosen-dir>/gke-<project>-<region>-<cluster>.yaml \
+       gcloud container clusters get-credentials <cluster> \
+       --region=<region> --project=<project>
+     ```
+   - 完成後提示使用者：執行 `switch` 即可在多叢集之間切換到該 context。
+   - 若使用者 switcher 配置已指向特定目錄（可檢查 `~/.kube/switch-config.yaml` 的 `kubeconfigPaths`），優先以該目錄為預設選項。
+
+3. **若無 `switch`**：才考慮使用預設 `~/.kube/config`，並建議使用者可安裝 `brew install switcher` 來管理多叢集。
+
+**理由：**
+- `switch` 將每個叢集 kubeconfig 獨立放在不同檔案，避免 `~/.kube/config` 累積大量 context 造成切換混亂、洩漏風險與 merge 衝突。
+- 直接讓 gcloud 寫進 `~/.kube/config` 會破壞既有 switch 工作流並難以清理。
+
+### 6. 常用查詢參考
 
 **GKE / Kubernetes：**
 ```
@@ -183,6 +144,49 @@ gcloud storage ls gs://<bucket>
 gcloud logging read "resource.type=k8s_container" --limit=50
 gcloud monitoring dashboards list
 ```
+
+### 6. GKE 唯讀權限授予範本（實戰踩坑）
+
+當使用者要求「給某帳號 GKE 唯讀權限」時，依以下範本設定。**關鍵踩坑**：`roles/container.viewer` 能 list/get/describe Pod 物件與其他 K8s 資源，但**不含 `container.pods.getLogs`**，所以 `kubectl logs`（或 k9s 看 log）會報 `Forbidden: requires container.pods.getLogs`。而 `roles/logging.viewer` 只對 **Cloud Logging 主控台** 有效，對 `kubectl logs` 無效（兩者授權路徑不同）。
+
+| 需求 | 需要的角色 | 說明 |
+|------|-----------|------|
+| 唯讀叢集 / K8s 物件（pods、deployments、services… list/get/describe） | `roles/container.viewer` | GKE 唯讀基礎 |
+| `kubectl logs` / k9s 看 pod log | 自訂角色含 `container.pods.getLogs` | container.viewer **不含**，須額外補 |
+| Cloud Logging 主控台看歷史 / container log | `roles/logging.viewer` | 走 Cloud Logging，非 K8s API |
+
+**標準設定流程（全唯讀）：**
+
+```bash
+PROJECT=<project-id>
+MEMBER=user:<email>
+
+# 1. GKE 唯讀基礎
+gcloud projects add-iam-policy-binding $PROJECT \
+  --member=$MEMBER --role=roles/container.viewer --condition=None
+
+# 2. 建立「只含 getLogs」的自訂角色（首次建立，之後可重用）
+#    注意：透過 gcloud-mcp 執行時，--title/--description 不可含空格（會被再次切詞），用底線代替
+gcloud iam roles create gkePodLogViewer --project=$PROJECT \
+  --title=GKE_Pod_Log_Viewer --description=Readonly_pod_logs \
+  --permissions=container.pods.getLogs --stage=GA
+
+# 3. 綁定自訂角色 → 讓 kubectl logs / k9s 可看 log
+gcloud projects add-iam-policy-binding $PROJECT \
+  --member=$MEMBER --role=projects/$PROJECT/roles/gkePodLogViewer --condition=None
+
+# 4.（選用）Cloud Logging 主控台唯讀
+gcloud projects add-iam-policy-binding $PROJECT \
+  --member=$MEMBER --role=roles/logging.viewer --condition=None
+```
+
+**驗證 / 排錯：**
+- 若 `kubectl logs` 仍 `Forbidden` → 確認步驟 2、3 已執行；IAM 變更約 1–2 分鐘生效，token 會自動帶新權限，必要時重抓憑證：
+  `gcloud container clusters get-credentials <cluster> --project $PROJECT --region <region>`
+- k9s log 畫面**空白但無紅字** → 多半不是權限問題，而是只 tail 當下之後的 log：進 log 畫面按 `0` 載入全部歷史、按 `a` 切換所有容器。
+- 確認角色權限：`gcloud iam roles describe roles/container.viewer --format="value(includedPermissions)"`（可見其無 `getLogs`）。
+
+> 備註：含 `getLogs` 的預設角色（如 `roles/container.developer`）會帶寫入權限，破壞唯讀原則，故採「container.viewer + 自訂 getLogs 角色」最小權限組合。
 
 ## 回應格式
 

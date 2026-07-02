@@ -1,5 +1,6 @@
 ---
-name: backend-development-python
+name: backend-python
+version: 1.0.0
 description: Guide for building production-grade, DDD-compliant Python backend services. Use this skill when the user asks to build backend features, API endpoints, database models, or infrastructure code in Python with Flask.
 color: green
 ---

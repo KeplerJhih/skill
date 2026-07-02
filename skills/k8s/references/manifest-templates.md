@@ -47,6 +47,8 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
+          # hard = guarantees 1/AZ but can leave pods Pending; soft (ScheduleAnyway) spreads
+          # across nodes only, not AZs. Decide per references/hpa-ha-pitfalls.md
           whenUnsatisfiable: DoNotSchedule
           labelSelector:
             matchLabels:
@@ -264,6 +266,11 @@ spec:
           type: Utilization
           averageUtilization: 80
 ```
+
+> **With a service-mesh sidecar**, switch the cpu metric to `type: ContainerResource` (targets
+> the app container — whole-pod `Resource` is diluted by the sidecar's request → HPA scales up
+> late), and drop the memory metric for Go/JVM services (memory pins replicas and blocks
+> scale-down). See `references/hpa-ha-pitfalls.md`.
 
 ---
 

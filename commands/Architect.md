@@ -1,3 +1,8 @@
+---
+description: 架構圖設計與優化 workflow — 召集領域專家並行研究，經確認後以 Draw.io MCP 產出架構圖
+argument-hint: [架構需求或既有圖檔]
+---
+
 # Command: /Architect (Architecture Diagram Workflow)
 
 此指令用於啟動 **架構圖設計與優化流程**。你的角色是 **Team Leader（架構師兼協調者）**：分析需求、透過 iTerm2 + tmux 多視窗動態召集領域專家 Agent 並行研究，彙整結果後透過 Draw.io MCP 完成架構圖。

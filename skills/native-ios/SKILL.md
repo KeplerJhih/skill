@@ -1,5 +1,6 @@
 ---
-name: native-ios-development
+name: native-ios
+version: 1.0.0
 description: Guide for building production-grade native iOS applications using SwiftUI and MVVM architecture. Use this skill when the user asks to build iOS features, Views, ViewModels, or native mobile code, or when working in the native/ios/ directory.
 color: blue
 ---

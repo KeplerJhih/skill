@@ -1,38 +1,15 @@
-# macOS
+# ~/.claude 是工具箱 repo 的 checkout：白名單式，只追蹤工具箱內容
+/*
+!/.gitignore
+!/CLAUDE.md
+!/README.md
+!/commands/
+!/skills/
+!/agents/
+!/hooks/
+!/shared/
+!/archive/
+!/script/
+!/setup.sh
+!/settings.toolkit.json
 .DS_Store
-.AppleDouble
-.LSOverride
-.trunk
-
-# Serena MCP metadata
-.serena/
-
-# Environment / secrets
-.env
-.env.local
-*.local
-
-# Logs
-*.log
-logs/
-
-# Editor / IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Node
-node_modules/
-
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Terraform
-*.tfstate
-*.tfstate.*
-.terraform/
-.terraform.lock.hcl

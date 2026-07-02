@@ -1,3 +1,8 @@
+---
+description: Agent Team 工作流程 — TeamCreate 多隊友協作，契約優先 + QA 驗證
+argument-hint: [需求描述]
+---
+
 # Command: /team (Agent Team Workflow)
 
 此指令啟動 **官方 Agent Team 多 Claude 實例協作模式**（Claude Code ≥ 2.1.32）。作為 **Team Lead**，你的職責是分析需求、制定團隊藍圖、**先 `TeamCreate` 建立 team，再用 `Agent`（在 team context 內 / 或帶 `team_name`）spawn 出 teammate**。每位 teammate 是獨立 Claude Code session，自動取得 `SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet` 協作工具，可彼此 `SendMessage` 直接對話、共享 task list、自動 idle 通知。
@@ -24,7 +29,7 @@
 |------|---------|---------|
 | Claude Code ≥ 2.1.32 | `claude --version` | 退回 `/doit` |
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` | 看 `settings.json` 的 `env` | 提示用戶開啟 |
-| `.claude/agents/` 存在通用隊友類型（`backend` / `frontend` / `mobile` / `qa` / `code-reviewer`） | `ls .claude/agents/` | 提示用戶補建或退回 `/doit` |
+| `~/.claude/agents/` 存在通用隊友類型（`backend` / `frontend` / `mobile` / `qa` / `code-reviewer`） | `ls ~/.claude/agents/` | 提示用戶補建或退回 `/doit` |
 | 終端環境（cmux / tmux / Claude 原生）spawn backend 可用 | 見下方「🖥️ 終端環境偵測」 | cmux 缺 shim → 停手要用戶重啟；其他環境直接繼續 |
 
 ---
@@ -80,7 +85,7 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 
 > **隊友類型是語言中立的角色**：`backend` 可能對應 Go / Python / Node / PHP / Ruby / Java / Rust，`frontend` 可能對應 React / Vue / Svelte / Astro 等，`mobile` 可能對應 iOS / Android / RN / Flutter。**實際載入哪個 skill 由隊友自己在啟動時偵測技術棧後動態匹配**，不在這裡寫死。
 
-讀取 `.claude/shared/workflow-base.md` 取得專案偵測規則、Serena 工具使用規範與 Skill 對照表，然後執行專案偵測。
+讀取 `~/.claude/shared/workflow-base.md` 取得專案偵測規則、Serena 工具使用規範與 Skill 對照表，然後執行專案偵測。
 
 ---
 
@@ -96,7 +101,7 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 > **您好！我是您的 Team Lead，準備為您組建 Agent Team。**
 >
 > **🔎 偵測結果**：`[從 workflow-base 步驟 0 取得，包含偵測到的技術棧]`
-> **🤝 可用隊友類型**：`[ls .claude/agents/ 列出，例：backend, frontend, mobile, qa, code-reviewer]`
+> **🤝 可用隊友類型**：`[ls ~/.claude/agents/ 列出，例：backend, frontend, mobile, qa, code-reviewer]`
 >
 > **請問需要處理什麼任務？**
 >
@@ -155,7 +160,8 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
     - 不需要列出每個目錄的具體語言（隊友會自己偵測），但要把**目錄絕對路徑**準備好填入啟動指令
     - 若專案僅有單一技術棧子目錄（例：純前端站、純後端 API）→ 在藍圖中明示，避免用戶困惑為何沒派 backend / frontend
 
-8.  **過度設計檢查（MANDATORY，藍圖前最後一道）**：依 `workflow-base.md` 三題自審。
+8.  **🔌 MCP 工具偵測**：依 `workflow-base.md`「🔌 MCP 工具動態偵測」掃描可用 MCP、匹配任務，結果納入藍圖，並在各隊友啟動 prompt 中標注分配給該隊友的 MCP 工具。
+9.  **過度設計檢查（MANDATORY，藍圖前最後一道）**：依 `workflow-base.md` 三題自審。
 
 ---
 
@@ -188,6 +194,9 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 > | `cr-{feature}` | `code-reviewer` | — | opus |（最後階段，可選）
 >
 > > 隊友會在啟動時自行偵測技術棧並動態匹配 skill，**這裡不寫死語言**。
+>
+> **🔌 MCP 工具**（動態偵測結果，僅列相關的）
+> - `[mcp名稱]` — [用途]（分配給：[隊友名稱]）
 >
 > **📊 需求分類**：`🅰️ 純前端` / `🅱️ 後端先行` （標示判斷理由）
 >
@@ -391,6 +400,6 @@ TeamDelete {}
 
 ## 🆘 隊友定義缺失時
 
-若 `.claude/agents/` 缺所需 subagent type：
-1. 提示用戶可建立檔案（範本參考其他 .claude/agents/*.md）
+若 `~/.claude/agents/` 缺所需 subagent type：
+1. 提示用戶可建立檔案（範本參考其他 ~/.claude/agents/*.md）
 2. 或退回 `/doit` 改由你親自處理

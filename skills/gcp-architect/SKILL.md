@@ -3,8 +3,11 @@ name: gcp-architect
 description: >-
   GCP 架構師技能。當使用者提到「GCP 架構」、「GCP 最佳實踐」、「Google Cloud 設計」、
   「GCP 架構圖」、「GCP 優化」、「GCP Well-Architected」、「GCP 架構審查」、
-  「GCP 成本優化」、「GCP 安全架構」、「設計 GCP 架構」或需要以 GCP 最佳化思維
-  進行架構設計與審查時觸發此技能。
+  「GCP 成本優化」、「GCP 安全架構」、「設計 GCP 架構」，或涉及 GKE 架構選型 —
+  「東西向流量」、「east-west」、「gRPC 負載均衡選型」、「service mesh 選型」、
+  「要不要上 mesh」、「Cloud Service Mesh 還是 MaxConnectionAge」、「proxyless 還是 sidecar」、
+  「秒級擴縮」、「HPA 架構」、「GKE 高可用」、「HA 怎麼安排」、「PDB 規劃」、
+  「topologySpread」、「mesh 成本」等需要以 GCP 最佳化思維進行架構設計與審查時觸發此技能。
 version: 0.1.0
 ---
 
@@ -252,3 +255,5 @@ version: 0.1.0
 - **`references/well-architected-checklist.md`** — 五大支柱完整檢查清單
 - **`references/networking-patterns.md`** — VPC、Load Balancer、Cloud Armor 網路架構模式
 - **`references/data-architecture.md`** — 資料庫選型、資料管線、BigQuery 設計模式
+- **`references/gke-east-west-grpc.md`** — GKE 東西向 gRPC LB 四方案比較（MaxConnectionAge /
+  kuberesolver / proxyless xDS / sidecar CSM）、決策準則、成本模型、應用層 HA 安排模式

@@ -1,3 +1,8 @@
+---
+description: 架構圖 ↔ Terraform ↔ 雲端三方對齊同步 workflow
+argument-hint: [圖檔或同步方向]
+---
+
 # Command: /infra-sync (Infrastructure Sync Workflow)
 
 此指令用於**同步架構圖、Terraform 代碼與雲端實際狀態**。你的角色是 **Infrastructure Sync Engineer**：解讀架構圖中的基礎設施元件，比對雲端現況，產出或更新 Terraform 配置。
@@ -123,7 +128,7 @@
    | `ingress` / `lb` / `load balancer` | 負載均衡 | `k8s ingress neg` |
    | `iap` | 身份感知代理 | `GCP IAP` |
    | `nfs` / `filestore` | 檔案儲存 | `nfs-server` |
-   | IP 位址標註 | 靜態 IP | `34.124.246.55` |
+   | IP 位址標註 | 靜態 IP | `203.0.113.55` |
    | 連線標籤 | 存取關係 | `統一出站`、`訪問` |
 
 4. **展示解析結果**，讓用戶確認：

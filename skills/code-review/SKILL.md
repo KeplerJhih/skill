@@ -1,5 +1,6 @@
 ---
 name: code-review
+version: 1.0.0
 description: 前後端通用的代碼審查指南。涵蓋 Go DDD 後端與 React/TypeScript 前端的結構化 Checklist，確保代碼質量、安全性與架構一致性。
 color: red
 ---

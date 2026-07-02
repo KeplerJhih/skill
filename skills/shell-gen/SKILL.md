@@ -1,6 +1,6 @@
 ---
 name: shell-gen
-description: 當使用者貼上 shell script 要求「重構」、「標準化」、「整理腳本」，或給專案名要求「產生部署腳本」、「寫 devops shell」、「建立自動化腳本」、「寫 devops_php.sh」、「寫 devops_node.sh」、「產生 devops_xx.sh」時觸發此技能。
+description: 當使用者貼上 shell script 要求「重構」、「標準化」、「整理腳本」，或給專案名要求「產生部署腳本」、「寫 devops shell」、「建立自動化腳本」、「寫 devops_php.sh」、「寫 devops_main.sh」、「寫 devops_node.sh」、「產生 devops_xx.sh」時觸發此技能。
 version: 1.0.0
 ---
 
@@ -15,27 +15,13 @@ version: 1.0.0
 
 ---
 
-## 伺服器標準目錄結構
+## 伺服器目錄結構與服務對照（單一來源：`deploy` skill）
 
-```
-/data/dev/git/{project}/
-├── backend/          # 後端原始碼（git repo）
-│   └── devops/       # dockerfile, configs
-└── frontend/         # 前端原始碼（git repo）
-    └── devops/       # dockerfile, configs
+伺服器標準目錄結構、服務類型對照表、前端 vs 後端部署差異，**由 `deploy` skill 擁有**，本 skill 不複寫（改結構時只改 deploy 一處）。
 
-/data/dev/{project}/
-├── docker-compose.yml
-└── exec/
-    ├── php/          # 後端執行目錄
-    │   └── src/
-    └── web/          # 前端執行目錄
-        └── dist/
-```
-
-部署腳本位置：
-- `/data/dev/git/{project}/devops_php.sh` — 後端部署
-- `/data/dev/git/{project}/devops_node.sh` — 前端部署
+產生腳本的輸出位置（對照 deploy 的結構）：
+- 後端：`/data/dev/git/{project}/backend/devops_php.sh`（或 `devops_go.sh`；Node.js 資料源為 `devops_node.sh`）
+- 前端：`/data/dev/git/{project}/frontend/devops_main.sh`（user web）、`devops_bgm.sh`（admin，若有）
 
 ---
 
@@ -104,7 +90,10 @@ update_code(){
 }
 ```
 
-#### 前端（Node/Vue）— `devops_node.sh`
+#### 前端（Node/Vue）— `devops_main.sh` / `devops_bgm.sh`
+
+前端服務使用容器化部署（image 內含 build 產物 + Nginx），**不需要 `update_code`**。
+部署流程：`git pull` → `docker build`（build 產物打包進 image）→ compose 重啟容器即生效。
 
 ```bash
 git_pull(){
@@ -114,20 +103,11 @@ git_pull(){
 
 docker_build(){
   echo "--- image build ---"
-  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV DOCKERFILE_PATH=./devops/dockerfile
-}
-
-update_code(){
-  echo "--- update docker compose ---"
-  docker-compose -f $EXEC_DIR/../../docker-compose.yml up web -d
-
-  echo "--- update exec ---"
-  cp -rf $DIR/__publish_frontend/dist/ $EXEC_DIR/dist_temp
-  mv $EXEC_DIR/dist $EXEC_DIR/dist_before
-  mv $EXEC_DIR/dist_temp $EXEC_DIR/dist
-  rm -rf $EXEC_DIR/dist_before
+  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV
 }
 ```
+
+> **注意**：前端不需要 `EXEC_DIR` 變數和 `update_code` 函式，因為 build 產物直接打包在 Docker image 內（multi-stage build），不需要原子替換到執行目錄。
 
 ### 4. 原子替換模式（禁止直接覆蓋）
 
@@ -146,6 +126,7 @@ cp -rf $SOURCE $EXEC_DIR/src/
 
 ### 5. main() 入口統一調度
 
+#### 後端 main()
 ```bash
 main(){
   cd $DIR/__publish_{service}
@@ -159,9 +140,21 @@ main(){
 main
 ```
 
+#### 前端 main()（無 update_code）
+```bash
+main(){
+  cd $DIR/__publish_{service}
+  git_pull
+  docker_build
+}
+
+main
+```
+
 - `main()` 是唯一執行入口
 - 函式呼叫順序清晰可見
 - 可快速註解/取消註解步驟（如 CI test）
+- **前端**使用容器化部署（image 含 build 產物），不需要 `update_code` 和 `EXEC_DIR`
 
 ### 6. Nginx reload（如需要）
 
@@ -211,14 +204,15 @@ docker exec nginx nginx -s reload
 
 根據上述資訊，套用標準模板產生：
 - `devops_php.sh` 或 `devops_go.sh`（後端）
-- `devops_node.sh`（前端）
+- `devops_main.sh`（前端 user web）、`devops_bgm.sh`（前端 admin，若有）
+- `devops_node.sh`（Node.js 資料源，若有）
 
 ### 步驟 3：輸出位置
 
-腳本預設產生在：
+腳本預設產生在（分層見 `deploy` skill 目錄結構）：
 ```
-/data/dev/git/{project}/devops_php.sh
-/data/dev/git/{project}/devops_node.sh
+/data/dev/git/{project}/backend/devops_php.sh
+/data/dev/git/{project}/frontend/devops_main.sh
 ```
 
 ---
@@ -278,7 +272,7 @@ main(){
 main
 ```
 
-### 前端 `devops_node.sh`
+### 前端 `devops_main.sh`
 
 ```bash
 #!/bin/bash
@@ -286,7 +280,6 @@ set -e
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXEC_DIR=/data/dev/california/exec/web
 
 CONTAINER_IMAGE=california/web
 XG_ENV=dev
@@ -298,26 +291,13 @@ git_pull(){
 
 docker_build(){
   echo "--- image build ---"
-  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV DOCKERFILE_PATH=./devops/dockerfile
-}
-
-update_code(){
-  echo "--- update docker compose ---"
-  docker-compose -f $EXEC_DIR/../../docker-compose.yml up web -d
-
-  echo "--- update exec ---"
-  cp -rf $DIR/__publish_frontend/dist/ $EXEC_DIR/dist_temp
-  mv $EXEC_DIR/dist $EXEC_DIR/dist_before
-  mv $EXEC_DIR/dist_temp $EXEC_DIR/dist
-  rm -rf $EXEC_DIR/dist_before
+  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV
 }
 
 main(){
   cd $DIR/__publish_frontend
   git_pull
   docker_build
-  update_code
-  docker exec nginx nginx -s reload
 }
 
 main

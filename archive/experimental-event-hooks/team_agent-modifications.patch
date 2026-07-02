@@ -1,0 +1,160 @@
+diff --git a/hooks/notify-notification.sh b/hooks/notify-notification.sh
+index 1df1ba8..0ad33d0 100755
+--- a/hooks/notify-notification.sh
++++ b/hooks/notify-notification.sh
+@@ -1,6 +1,8 @@
+ #!/bin/bash
+ # Hook: Notification event — Claude 等待用戶回應時觸發
+ # stdin 接收 JSON，解析後動態產生通知訊息
++#
++# 在原本的 terminal-notifier 行為之後，額外將事件 POST 給 team-agent backend。
+ 
+ INPUT=$(cat)
+ MESSAGE=$(echo "$INPUT" | jq -r '.notification_message // empty')
+@@ -10,4 +12,11 @@ if [ -z "$MESSAGE" ]; then
+ fi
+ 
+ terminal-notifier -title "Claude" -message "$MESSAGE" -sound default
++
++# Forward to team-agent backend (best-effort, never blocks).
++DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++# shellcheck source=event-base.sh
++source "$DIR/event-base.sh"
++printf '%s' "$INPUT" | post_event "notification"
++
+ exit 0
+diff --git a/hooks/notify-stop.sh b/hooks/notify-stop.sh
+index abbf1fd..08740c6 100755
+--- a/hooks/notify-stop.sh
++++ b/hooks/notify-stop.sh
+@@ -1,6 +1,8 @@
+ #!/bin/bash
+ # Hook: Stop event — Claude 完成回應時觸發
+ # stdin 接收 JSON，解析後動態產生通知訊息
++#
++# 在原本的 terminal-notifier 行為之後，額外將事件 POST 給 team-agent backend。
+ 
+ INPUT=$(cat)
+ STOP_REASON=$(echo "$INPUT" | jq -r '.stop_reason // empty')
+@@ -18,4 +20,11 @@ case "$STOP_REASON" in
+ esac
+ 
+ terminal-notifier -title "Claude" -message "$MESSAGE" -sound default
++
++# Forward to team-agent backend (best-effort, never blocks).
++DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++# shellcheck source=event-base.sh
++source "$DIR/event-base.sh"
++printf '%s' "$INPUT" | post_event "stop"
++
+ exit 0
+diff --git a/run.sh b/run.sh
+index ffc335f..395a44c 100755
+--- a/run.sh
++++ b/run.sh
+@@ -6,4 +6,21 @@ printf "║  📂 工作目錄: %-45s ║\n" "$(pwd)"
+ echo "╚══════════════════════════════════════════════════════════════╝"
+ echo ""
+ 
+-claude --dangerously-skip-permissions
++# Resolve project dir from this script's own location so it works whether
++# launched by Claude Code (CLAUDE_PROJECT_DIR set) or directly from a shell.
++PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
++
++# Prefer the team-agent PTY wrapper so the session shows up on the dashboard.
++# The wrapper spawns `claude --dangerously-skip-permissions` itself.
++AGENTCTL="$PROJECT_DIR/backend/go/bin/agentctl"
++
++if [ -x "$AGENTCTL" ]; then
++  exec "$AGENTCTL"
++fi
++
++echo "[run.sh] agentctl binary not found at: $AGENTCTL"
++echo "[run.sh] falling back to claude directly. To enable the dashboard:"
++echo "         cd \"$PROJECT_DIR\"/backend/go && make agentctl"
++echo ""
++
++exec claude --dangerously-skip-permissions
+diff --git a/settings.json b/settings.json
+index a366d56..e1edd3a 100644
+--- a/settings.json
++++ b/settings.json
+@@ -3,6 +3,78 @@
+     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+   },
+   "hooks": {
++    "SessionStart": [
++      {
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/event-session-start.sh",
++            "timeout": 5
++          }
++        ]
++      }
++    ],
++    "UserPromptSubmit": [
++      {
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/event-user-prompt.sh",
++            "timeout": 5
++          }
++        ]
++      }
++    ],
++    "PreToolUse": [
++      {
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/event-pre-tool.sh",
++            "timeout": 5
++          }
++        ]
++      }
++    ],
++    "PostToolUse": [
++      {
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/event-post-tool.sh",
++            "timeout": 5
++          }
++        ]
++      }
++    ],
++    "SubagentStop": [
++      {
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/event-subagent-stop.sh",
++            "timeout": 5
++          }
++        ]
++      }
++    ],
++    "SessionEnd": [
++      {
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/event-session-end.sh",
++            "timeout": 5
++          }
++        ]
++      }
++    ],
+     "Notification": [
+       {
+         "matcher": "",

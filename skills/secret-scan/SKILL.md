@@ -1,5 +1,5 @@
 ---
-name: Secret-Scan & Remediation
+name: secret-scan
 description: 當使用者提到「掃描機敏資訊」、「hardcode」、「寫死密碼」、「secret scan」、「credential scan」、「移除密碼」、「環境變數化」、「secrets to env」、「安全掃描」、「敏感資料」、「API key 外洩」或需要將寫死的帳密、Token、IP 等機敏資訊改為環境變數注入時觸發此技能。適用於任何語言（PHP、Go、Python、Node.js/TypeScript、Java 等）。
 version: 1.0.0
 ---

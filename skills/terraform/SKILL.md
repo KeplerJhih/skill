@@ -2,20 +2,21 @@
 name: terraform
 description: >-
   This skill should be used when the user asks to "deploy to AWS", "deploy to GCP",
-  "create Terraform config", "write .tf files", "terraform plan", "terraform apply",
-  "tf plan", "tf apply", "tf init", "tf import", "tf state",
-  "provision infrastructure", "create VPC", "set up ECS", "set up Cloud Run",
-  "review Terraform security", "refactor Terraform modules", "add a new cloud resource",
-  "set up load balancer", "configure DNS", "create S3 bucket", "set up RDS",
-  "deploy to BytePlus", or mentions Terraform, tf, tofu, OpenTofu, HCL,
-  tfvars, tfstate, .tf files, IaC, infrastructure-as-code,
-  or cloud resource provisioning on AWS/GCP/BytePlus.
-version: 0.3.0
+  "deploy to Aliyun", "deploy to 阿里雲", "create Terraform config", "write .tf files",
+  "terraform plan", "terraform apply", "tf plan", "tf apply", "tf init", "tf import",
+  "tf state", "provision infrastructure", "create VPC", "set up ECS", "set up Cloud Run",
+  "set up ACK", "create ACR", "review Terraform security", "refactor Terraform modules",
+  "add a new cloud resource", "set up load balancer", "configure DNS",
+  "create S3 bucket", "set up RDS", "deploy to BytePlus", "set up Atlantis",
+  "atlantis plan", "atlantis apply", "configure atlantis.yaml", "atlantis webhook",
+  or mentions Terraform, tf, tofu, OpenTofu, HCL, tfvars, tfstate, .tf files, IaC,
+  infrastructure-as-code, Atlantis, or cloud resource provisioning on AWS/GCP/Aliyun/BytePlus.
+version: 0.5.0
 ---
 
 # Terraform Infrastructure Skill
 
-Provision, manage, and review infrastructure-as-code using Terraform across AWS, GCP, and BytePlus.
+Provision, manage, and review infrastructure-as-code using Terraform across AWS, GCP, Aliyun (阿里雲), and BytePlus.
 
 ## MCP Tool Detection (MANDATORY on Skill Load)
 
@@ -53,7 +54,7 @@ If Terraform MCP is not detected, provide these setup options:
 
 **Option 1: Terraform Registry MCP** (provider/module docs lookup)
 ```json
-// Add to .claude/settings.json → mcpServers
+// Add to 專案根目錄 .mcp.json → mcpServers
 "terraform-mcp": {
   "command": "npx",
   "args": ["-y", "terraform-mcp-server"]
@@ -92,6 +93,32 @@ If Terraform MCP is not detected, provide these setup options:
 
 ---
 
+## Cloud Pitfalls Skill Detection (MANDATORY on Skill Load)
+
+偵測當前專案的 cloud provider 後，**自動載入對應雲的踩坑 / 架構 skill**（依偵測結果決定，**不寫死單一雲** — 同一台機器這個 repo 是 Aliyun、下一個可能是 AWS/GCP）。
+
+### Detection Steps
+
+1. **偵測 provider**（依序，取到即停）：
+   - `grep -rhE 'source\s*=' **/versions.tf providers.tf` 看 `required_providers` 的 source
+   - 已 init 的話 `terraform providers`
+   - 退而求其次看 tfvars 的 region 命名：`cn-*` / `ap-northeast-1` 等 → alicloud；`us-east-1` 等 → aws；`*-central1` / `asia-*` → gcp
+
+2. **依偵測結果載入對應 skill**（用 `Skill` 工具，可多個）：
+
+   | provider source | 載入 skill |
+   |---|---|
+   | `aliyun/alicloud` | `aliyun-pitfalls` |
+   | `hashicorp/aws` | `aws-architect` |
+   | `hashicorp/google` / `google-beta` | `gcp-architect` |
+   | 多 provider 並存 | 全部對應 skill 都載 |
+
+3. **偵測不到**（全新專案、無 `.tf`）→ 先問使用者目標雲，**不臆測**。
+
+> **Rule**: 此步與上方 MCP Detection 同為 skill 載入時的 mandatory 動作。Aliyun 場景**務必**載 `aliyun-pitfalls`（28+ 條實戰踩坑：provider 漂移、Terway ENI IP 不足、ACR EE 免密、cgroup v2、autoscaling 轉換陷阱、CAS wildcard… 第一次部署 ACK/ACR/EIP 不讀必踩）。
+
+---
+
 ## Core Principles
 
 > **🚨 CRITICAL: `terraform apply` / `terraform destroy` 禁止自行執行**
@@ -106,7 +133,7 @@ If Terraform MCP is not detected, provide these setup options:
 - **Module-First** — Encapsulate every logical resource group into a reusable module. Avoid inline resource sprawl in root modules.
 - **Provider Agnostic Where Possible** — Abstract cloud-specific details into modules; root configurations should read like a deployment manifest.
 - **Least Privilege** — IAM roles, service accounts, and security groups grant only what is needed. No wildcards (`*`) in production policies.
-- **State Safety** — Local backend by default. Never commit `.tfstate` files. Use `.gitignore` to exclude `*.tfstate`, `*.tfstate.backup`, `.terraform/`.
+- **State Safety** — Never commit `.tfstate` files. Use `.gitignore` to exclude `*.tfstate`, `*.tfstate.backup`, `.terraform/`. When using Atlantis or any CI/CD, **must use remote backend** (GCS/S3) — local backend will lose state on every run.
 - **Immutable Inputs** — All configurable values flow through `variables.tf`. No hardcoded IDs, regions, or credentials in resource blocks.
 - **Plan Before Apply** — Always run `terraform plan` and present the output for user review. **Never run `apply` without explicit user approval.**
 
@@ -143,24 +170,29 @@ For new Terraform projects, follow the standard module layout defined in `refere
 Typical root structure:
 
 ```
-infra/
-├── environments/
-│   ├── dev/
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   ├── terraform.tfvars
-│   │   ├── providers.tf
-│   │   └── backend.tf
-│   └── prod/
-│       └── ... (same structure)
+terraform/                      # Git repo root
+├── .gitignore                  # Exclude .terraform/, *.tfstate, repos.yaml
+├── atlantis.yaml               # Atlantis project config (進 git)
+├── repos.example.yaml          # Server-side config 範例 (進 git)
 ├── modules/
+│   ├── gcs-bucket/
 │   ├── networking/
 │   ├── compute/
-│   ├── database/
-│   └── storage/
-└── .gitignore
+│   └── database/
+└── env/
+    ├── dev/
+    │   ├── main.tf             # Module calls
+    │   ├── variables.tf
+    │   ├── outputs.tf
+    │   ├── providers.tf        # Provider + remote backend
+    │   └── terraform.tfvars
+    ├── staging/
+    │   └── ... (same structure)
+    └── prod/
+        └── ... (same structure)
 ```
+
+> When using Atlantis, `repos.yaml` (actual server-side config) stays **outside** the repo on the Atlantis server, excluded via `.gitignore`. Only `repos.example.yaml` is committed as a template.
 
 Use `scripts/tf-init-module.sh` to scaffold module directories quickly.
 
@@ -369,11 +401,33 @@ Consult `references/gcp-patterns.md` for common patterns:
 > `http_load_balancing`（`disabled = false`）。缺少此設定會導致 GCE Ingress Controller
 > 無法運作、GCLB Ingress 無法綁定 IP。詳見 `references/gcp-patterns.md` 的 GKE Autopilot 區段。
 
+### Aliyun (阿里雲 / Alibaba Cloud)
+
+Consult `references/aliyun-patterns.md` for common patterns:
+- VPC + 多 AZ vSwitch
+- NAT Gateway + EIP（統一出站，PayByTraffic 彈性帶寬）
+- ACR EE（Container Registry Enterprise）+ namespace + VPC endpoint
+- ACK Pro Managed（Kubernetes 託管 Pro 版）+ NodePool + Cluster Autoscaler
+- OSS backend（state 存阿里雲，含 versioning）
+
+> **🚨 重要**：阿里雲踩坑非常多，**務必同步閱讀 [`aliyun-pitfalls`](../aliyun-pitfalls/SKILL.md) skill**。
+> 涵蓋 provider 漂移到 cn-beijing、Terway ENI IP 不足、`AliyunOOSLifecycleHook4CSRole`
+> 一次性授權、`AliyunLinux3` 不支援 cgroup v2、ACR EE `instance_type` 校驗器舊名等
+> 高頻踩坑點。**第一次部署 ACK 強烈建議先讀這份文件。**
+
+#### Aliyun 特有注意事項
+
+- **Provider 必須用 `aliyun/alicloud`**（不是 legacy `hashicorp/alicloud`），每個 module 加 `versions.tf` 顯式宣告
+- **認證走 `profile = "default"`**（共用 `aliyun configure` 的 `~/.aliyun/config.json`）
+- **大陸區 (cn-*) 需中國實名認證**，國際區 (ap-*) 不用
+- **ACR EE 必須手動建 `acr-configuration` ConfigMap**（不像個人版自動）
+- **K8s 1.30+ NodePool 必須用 `AliyunLinux3ContainerOptimized` image**（支援 cgroup v2）
+
 ### BytePlus
 
 BytePlus uses a community/custom Terraform provider. When working with BytePlus:
 - Check provider availability at the Terraform Registry
-- Follow the same module structure as AWS/GCP
+- Follow the same module structure as AWS/GCP/Aliyun
 - Document any provider-specific quirks in comments
 
 ---
@@ -407,7 +461,9 @@ BytePlus uses a community/custom Terraform provider. When working with BytePlus:
 - **用 `name` 不用 `name_prefix`** — `name_prefix` 會產生隨機後綴（如 `money-prod-web-20260413...`），難以辨識。用固定 `name`（如 `money-prod-web-sg`）更清晰。
 - **Outputs 要包含 name** — 除了 ID 和 ARN，也輸出 `name`，方便 debug 和確認。
 - **root_volume_size 預設 30GB** — Amazon Linux 2023 等常見 AMI snapshot 為 30GB，設 20GB 會報錯。預設值用 30GB 更安全。
+- **VM AMI 必須寫死（pin）在 tfvars** — 動態查詢（`data.aws_ami`）會在新 AMI 發佈時導致 `terraform plan` 出現 **force replacement**（destroy + create），造成 instance 資料遺失。正確做法：在 tfvars 的 `ami` 欄位寫死 AMI ID（如 `ami = "ami-0761abe7d296ac155"`）。若用戶新增 VM 或未指定 AMI，**必須先列出該 region + architecture 的可用 AMI 版本（LTS 優先），詢問用戶要使用哪個版本後再寫入 tfvars**，不可自行決定。
 - **改 variables 必須同步 tfvars** — 每次新增 variable 欄位，必須同步更新 `terraform.tfvars` 明確賦值，即使有 default。確保 tfvars 是完整的配置文件。
+- **共用屬性用環境層 default 變數** — 多台 VM 共用的屬性（如 `key_name`）不要在每台 instance 重複寫，改用環境層級的 `default_*` 變數（如 `default_key_name`），在 `locals.resolved_instances` 用 `coalesce(v.key_name, var.default_key_name)` 合併。個別 instance 仍可覆蓋。這減少 tfvars 重複且確保一致性。
 
 ### Three-Layer Separation（三層分離原則）
 
@@ -507,6 +563,14 @@ output "instance_ids" {
 
 ---
 
+## Atlantis Integration
+
+When using Atlantis for GitOps-driven Terraform, consult **`references/atlantis-integration.md`** for full details.
+
+Covers: project structure, atlantis.yaml / repos.yaml config, remote backend requirements, webhook notifications, GCP authentication, server startup, state migration, and common issues troubleshooting.
+
+---
+
 ## Additional Resources
 
 ### Reference Files
@@ -516,6 +580,7 @@ For detailed patterns and checklists, consult:
 - **`references/aws-patterns.md`** — AWS resource templates (VPC, ECS, RDS, S3, ALB, etc.)
 - **`references/gcp-patterns.md`** — GCP resource templates (VPC, Cloud Run, Cloud SQL, etc.)
 - **`references/security-checklist.md`** — Security audit checklist for Terraform configurations
+- **`references/atlantis-integration.md`** — Atlantis GitOps integration (config, webhooks, auth, troubleshooting)
 
 ### Scripts
 

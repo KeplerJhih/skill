@@ -1,6 +1,6 @@
 # 共用工作流程基礎 (Shared Workflow Base)
 
-> 此檔案被 `/doit` 與 `/team` 共用。修改時請同時考慮兩端影響。
+> **📍 全域唯一正本**（`~/.claude/shared/workflow-base.md`）：被所有專案的 `/doit` 與 `/team` 共用。修改時請同時考慮兩端影響。專案差異寫在各專案 CLAUDE.md，**不得**另存專案級拷貝（會造成漂移）。
 
 ---
 
@@ -43,7 +43,7 @@ CLAUDE.md 是專案地圖的 **single source of truth**。
 | 已登錄存在 | ✅ 依根 CLAUDE.md 描述使用 |
 | 未登錄存在 | 🔍 提示「發現未登錄子專案」，建議補進根地圖 |
 | 已登錄缺失 | ⚠️ 提示「可能已重構」 |
-| 根地圖不存在 | 🟡 將 glob 結果視為臨時地圖，建議建立（範本：`.claude/shared/templates/CLAUDE.md.template`） |
+| 根地圖不存在 | 🟡 將 glob 結果視為臨時地圖，建議建立（範本：`~/.claude/shared/templates/CLAUDE.md.template`） |
 
 **Trivial / Docs / 單一子專案的 Config 任務跳過此步驟**——小範圍改動不需要對賬整個地圖。
 
@@ -128,7 +128,7 @@ CLAUDE.md 仍有資訊缺口時：
 3. **列出**將載入的 Skill 清單（name + 用途），讓用戶知道
 4. 使用 `Skill tool` 逐一載入
 
-> **匹配機制**：description 用來判斷契合度，name 用來呼叫。例：任務「寫 React 表單」→ description 含「React/TypeScript」的 Skill → name 可能是 `frontend` 或 `frontend-development`，**以實際清單為準**。
+> **匹配機制**：description 用來判斷契合度，name 用來呼叫。例：任務「寫 React 表單」→ description 含「React/TypeScript」的 Skill → name 是 `frontend`（載入 ID = skill 目錄名），**以實際清單為準**。
 
 ### 步驟 3：Agent 自行載入（僅 /team）
 
@@ -154,6 +154,35 @@ CLAUDE.md 仍有資訊缺口時：
 - ❌ 跳過 Skill 直接靠既有程式碼推斷步驟 → 會遺漏配套設定
 - ❌ 不分青紅皂白載入所有 Skill → 浪費上下文、干擾重點
 - ✅ 強制安全網 → 分析任務 → 自動匹配 → 列出清單 → 載入 → 制定藍圖
+
+---
+
+## 🔌 MCP 工具動態偵測（Skill 載入後、藍圖前）
+
+> 此段落被 `/doit` 與 `/team` 共用。
+
+### 偵測流程
+
+1. **列舉可用 MCP**：從 system-reminder 的 deferred tools 清單提取 `mcp__<server-name>__` 前綴，去重得到當前已連線的 MCP server 清單
+2. **任務匹配**：根據任務需求與偵測到的技術棧，篩選出**與本次任務相關**的 MCP 工具
+3. **列出結果**：在藍圖「🔌 MCP 工具」欄展示匹配結果及用途
+
+### 匹配原則
+
+- **按需匹配**：只選與本次任務直接相關的 MCP，不要全部列出
+- **智能推斷**（參考示例，非窮舉，以當前環境實際可用者為準）：
+  - 代碼分析 / 精準編輯 → `serena`
+  - 查文檔 / 版本遷移 → `context7`
+  - 前端 UI 測試 / E2E → `chrome-devtools`
+  - iOS 開發 / 測試 → `xcodebuild`、`ios-simulator`
+  - 架構圖 / 流程圖 → `drawio-mcp`
+  - GCP / AWS / 阿里雲資源 → `gcloud-mcp`、`awslabs.*`、`alibabacloud`
+  - Figma 設計稿 → `figma`
+- **不寫死**：出現新的 MCP server 也應能自動識別並匹配
+
+### `/team` 額外規則
+
+每個隊友的啟動 prompt 應包含分配給該隊友的 MCP 工具清單（名稱 + 用途），使隊友知道有哪些工具可用。
 
 ---
 
@@ -183,7 +212,7 @@ CLAUDE.md 仍有資訊缺口時：
 - ❌ 包裝原本簡單的工具函式為 class → 沒帶來任何好處
 - ❌ 為了「分層」把 30 行檔案拆成 3 個檔 → 增加閱讀成本
 - ❌ 加「未來可擴充」的設定鉤子但沒有第二個使用者 → 純粹增加複雜度
-- ❌ 共用文件（templates / workflow-base / shared）的範例使用當下對話的具體名詞 → 跨專案重用時誤導
+- ❌ 工具箱內容（skills / commands / agents / templates / workflow-base 等 `~/.claude` 全域檔案）寫死當下對話的專案名詞、路徑或場景 → 跨專案重用時誤導；確屬專案特定的內容放該專案 `.claude/` 層
 
 ### 黃金原則
 

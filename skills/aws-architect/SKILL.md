@@ -33,24 +33,21 @@ version: 0.1.0
 - 深入理解 AWS Well-Architected Framework 六大支柱
 - 熟悉 AWS 200+ 服務的適用場景與限制
 - 能根據業務需求在成本、效能、可靠性之間做出合理取捨
-- 整合 awslabs 官方 MCP 工具（aws-api、aws-docs、eks；IaC 需要時載入 aws-iac）進行即時查詢與驗證
+- 整合 AWS MCP 工具（aws-api、aws-docs、aws-cdk）進行即時查詢與驗證
 
 ---
 
-## AWS MCP 工具整合（awslabs 官方）
+## AWS MCP 工具整合
 
 架構設計過程中，結合以下 MCP 工具進行即時查詢：
 
-| 工具 | 套件 | 用途 | 使用時機 |
-|------|------|------|---------|
-| `aws-api` | `awslabs.aws-api-mcp-server` | 查詢/操作 AWS API、資源狀態 | 架構審查時查現況、運維查詢 |
-| `aws-docs` | `awslabs.aws-documentation-mcp-server` | AWS 官方文件、API Reference、What's New | 確認服務規格、限制、定價 |
-| `eks` | `awslabs.eks-mcp-server` | EKS cluster / node / workload / CloudWatch 查詢 | EKS 架構審查、除錯 |
-| `aws-iac`（按需載入） | `awslabs.aws-iac-mcp-server` | CloudFormation + CDK（取代棄用的 `aws-cdk`） | IaC 產出與驗證 |
+| 工具 | 用途 | 使用時機 |
+|------|------|---------|
+| `aws-api` (call_aws) | 查詢現有 AWS 資源狀態 | 架構審查時查現況 |
+| `aws-docs` (search/read) | 查閱 AWS 官方文件 | 確認服務規格、限制、定價 |
+| `aws-cdk` | CDK 指導與 Solutions Construct | CDK 專案的架構建議 |
 
-**棄用提醒（2026/04）**：`aws-cdk` standalone 與 `aws-terraform` MCP 已 DEPRECATED。CDK 改用 `aws-iac`；Terraform 改用 HashiCorp 官方 `terraform-mcp-server` + `terraform` skill。
-
-使用前先以 `ToolSearch query="aws-api"`（或對應名稱）載入工具 schema。
+使用前先以 `ToolSearch query="aws-api"` 載入工具 schema。
 
 ---
 
@@ -146,9 +143,8 @@ version: 0.1.0
 #### 階段二：實作產出
 
 - **架構圖**：載入 `drawio-optimizer` skill 繪製
-- **Terraform 配置**：載入 `terraform` skill（搭配 HashiCorp `terraform-mcp-server`），引用 `references/aws-patterns.md`
-- **CDK / CloudFormation 代碼**：載入 `aws-iac` MCP（取代已棄用的 `aws-cdk` standalone），取得 Solutions Construct patterns 與 CFN 資源合法 schema
-- **EKS 相關產出**：使用 `eks` MCP 驗證 cluster 配置、add-on 相容性
+- **Terraform 配置**：載入 `terraform` skill，引用 `references/aws-patterns.md`
+- **CDK 代碼**：使用 `aws-cdk` MCP 取得 Solutions Construct patterns
 
 ---
 
@@ -229,3 +225,4 @@ version: 0.1.0
 - **`references/well-architected-checklist.md`** — 六大支柱完整檢查清單
 - **`references/networking-patterns.md`** — VPC、ALB/NLB、CloudFront、WAF 網路架構模式
 - **`references/data-architecture.md`** — 資料庫選型、資料管線、Athena/Redshift 設計模式
+- **`references/eks-troubleshooting.md`** — EKS 實戰踩坑紀錄（EBS CSI IRSA、節點加入失敗等排錯）

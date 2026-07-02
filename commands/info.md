@@ -1,3 +1,8 @@
+---
+description: 快速查詢一般資訊或技術概念，不掃描代碼庫
+argument-hint: [問題]
+---
+
 # Command: /info
 
 此指令用於快速查詢一般資訊或技術概念，**不進行代碼庫掃描 (No Codebase Scan)**。

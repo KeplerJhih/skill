@@ -45,7 +45,7 @@ Git Push / Tag
 // ============================================================
 def prjName = "{project-name}"            // 專案名稱（Ansible 用）
 def targetName = "{project-testserver}"    // 測試服主機名
-def devtargetName = "xg-localK8sServer"   // 地端主機名
+def devtargetName = "{local-k8s-server}"   // 地端主機名
 
 // Discord 通知頻道（Jenkins 憑證變數）
 @groovy.transform.Field

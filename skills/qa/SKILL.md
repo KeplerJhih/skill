@@ -1,5 +1,6 @@
 ---
-name: qa-automation
+name: qa
+version: 1.0.0
 description: Automated QA testing using Chrome DevTools MCP. Validates web applications by generating and executing E2E tests.
 color: orange
 ---

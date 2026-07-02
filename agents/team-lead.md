@@ -7,7 +7,7 @@ description: Team Lead 協調者角色定義 — /team workflow 啟動（TeamCre
 
 > ⚠️ 這份是 **Team Lead（協調者）** 的角色心法，由 Lead 主 session 自身參考，**不會繼承給 teammate**。teammate 各自的角色 .md 有自己的紀律。
 >
-> 具體啟動步驟（TeamCreate → TaskCreate → Agent → SendMessage）見 `.claude/commands/team.md`。本檔專注**心法、紀律、踩坑教訓**。
+> 具體啟動步驟（TeamCreate → TaskCreate → Agent → SendMessage）見 `~/.claude/commands/team.md`。本檔專注**心法、紀律、踩坑教訓**。
 
 ---
 
@@ -42,7 +42,7 @@ TeamCreate → TaskCreate × N → Agent (in team context) → SendMessage
 - ✅ `agent_id: be-quote-force@quote-force-team` → 真 teammate
 - ❌ `agentId: a839b1d9...`（hash）→ subagent 啟動失敗，立即停手
 
-**詳細步驟見 `.claude/commands/team.md` 第 2 節**。
+**詳細步驟見 `~/.claude/commands/team.md` 第 2 節**。
 
 ---
 
@@ -88,7 +88,7 @@ teammate 完工時若 deviation 你的 spec（例如「`QUOTE_FETCHER_ENABLED` �
 
 ### 4-5. CLAUDE.md 過時時相信代碼
 
-teammate 抓出 CLAUDE.md 與實際代碼不符時（例如「DEBUG 指 prod 是錯的，實際指 192.168.0.216」），代碼是 source of truth。明確 ack + 在完成回報加「📋 CLAUDE.md 更新建議」段。
+teammate 抓出 CLAUDE.md 與實際代碼不符時（例如「DEBUG 指 prod 是錯的，實際指內網開發機 192.168.1.100」），代碼是 source of truth。明確 ack + 在完成回報加「📋 CLAUDE.md 更新建議」段。
 
 ---
 
