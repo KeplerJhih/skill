@@ -242,8 +242,8 @@ import (
     "fmt"
     "time"
 
-    goredis "github.com/redis/go-redis/v9"
     "github.com/google/uuid"
+    "github.com/redis/go-redis/v9"
 )
 
 type Lock struct {
@@ -350,6 +350,7 @@ import (
     "log/slog"
     "time"
 
+    "github.com/google/uuid"
     "github.com/redis/go-redis/v9"
 )
 
@@ -433,7 +434,9 @@ func (q *QueueService) Consume(ctx context.Context, taskType string, handler Tas
 
         var task Task
         if err := json.Unmarshal([]byte(result[1]), &task); err != nil {
-            slog.Error("queue unmarshal failed", "type", taskType, "error", err)
+            // 毒消息（解析失敗）不可默默丟棄——進 dead letter queue 留存待查
+            slog.Error("queue unmarshal failed, moved to dead letter", "type", taskType, "error", err)
+            q.client.LPush(ctx, q.deadLetterKey(taskType), result[1])
             continue
         }
 
@@ -442,7 +445,9 @@ func (q *QueueService) Consume(ctx context.Context, taskType string, handler Tas
             slog.Error("queue task failed", "type", taskType, "task_id", task.ID, "error", err, "retries", task.Retries)
             task.Retries++
             if task.Retries < maxRetries {
-                // 重新入列
+                // 重新入列前退避，避免零間隔熱循環（外部依賴故障時會瞬間燒完重試次數）；
+                // 需要精細控制時改用 ZSET delayed queue
+                time.Sleep(time.Duration(task.Retries) * time.Second)
                 taskData, _ := json.Marshal(task)
                 q.client.LPush(ctx, key, taskData)
             } else {
@@ -505,7 +510,8 @@ go queueService.Consume(consumerCtx, "email:order-confirmation", func(ctx contex
 | **DB 先於 Queue** | 先完成 DB 操作（事務提交），再 Enqueue。避免 DB 失敗但消息已發出 |
 | **Enqueue 失敗不阻斷** | 主流程不因 Enqueue 失敗而回傳 500。記 `slog.Error` 並考慮補償機制 |
 | **Handler 需冪等** | Consumer handler 必須設計為冪等（同一任務重複處理不會產生副作用） |
-| **Dead Letter Queue** | 超過重試次數的任務進入 dead letter queue，不可丟棄。需要人工/腳本處理 |
+| **Dead Letter Queue** | 超過重試次數的任務**與解析失敗的毒消息**都進 dead letter queue，不可丟棄。需要人工/腳本處理 |
+| **重試需退避** | 失敗任務重新入列前必須延遲（sleep / delayed queue），禁止零間隔立即重試 |
 | **Graceful Shutdown** | 關閉 consumer 前先取消 context，等待當前任務完成（不中斷處理中的任務） |
 | **BRPOP Timeout** | 設為 1 秒，讓 consumer loop 有機會檢查 context 取消信號 |
 
@@ -518,22 +524,29 @@ go queueService.Consume(consumerCtx, "email:order-confirmation", func(ctx contex
 ```go
 // internal/interfaces/api/middleware/ratelimit.go
 
-func RateLimitMiddleware(client *redis.Client, limit int, window time.Duration) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        key := fmt.Sprintf("ratelimit:%s", c.ClientIP())
+// INCR 與 EXPIRE 必須原子執行（Lua）：若分兩步，INCR 後 process crash 會留下
+// 永不過期的計數 key，違反「所有 Key 必須設 TTL」規則。
+var rateLimitScript = redis.NewScript(`
+    local count = redis.call("INCR", KEYS[1])
+    if count == 1 then
+        redis.call("EXPIRE", KEYS[1], ARGV[1])
+    end
+    return count
+`)
 
-        count, err := client.Incr(c.Request.Context(), key).Result()
+func RateLimitMiddleware(client *redis.Client, prefix string, limit int, window time.Duration) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        key := fmt.Sprintf("%s:ratelimit:ip:%s", prefix, c.ClientIP())
+
+        count, err := rateLimitScript.Run(c.Request.Context(), client, []string{key}, int(window.Seconds())).Int64()
         if err != nil {
             c.Next() // Redis 故障時放行，不阻斷服務
             return
         }
 
-        if count == 1 {
-            client.Expire(c.Request.Context(), key, window)
-        }
-
         if count > int64(limit) {
-            c.AbortWithStatusJSON(429, response.Error(429, "請求過於頻繁，請稍後再試"))
+            c.AbortWithStatusJSON(http.StatusTooManyRequests,
+                response.Response{Code: http.StatusTooManyRequests, Message: "請求過於頻繁，請稍後再試"})
             return
         }
 
@@ -628,9 +641,7 @@ REDIS_READ_TIMEOUT=3s
 REDIS_WRITE_TIMEOUT=3s
 
 # Cache
-CACHE_DEFAULT_TTL=15m
-CACHE_KEY_PREFIX=myapp
-
-# Queue
-QUEUE_MAX_RETRIES=3
+CACHE_KEY_PREFIX=myapp   # 應用級 key 前綴，main.go 讀取後傳入 NewCacheService / NewLockService / NewQueueService
 ```
+
+> 注意：TTL 與重試次數**不做成設定項**——TTL 每類快取各異，在呼叫點指定；maxRetries 是 `Consume()` 的參數。沒有代碼讀取的 key 不要放進 `.env.example`。

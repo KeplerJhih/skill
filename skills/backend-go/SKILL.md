@@ -35,8 +35,10 @@ color: blue
 
 嚴格遵守此目錄結構。不要混合不同層級。
 
+> **後端根目錄 `{BACKEND_DIR}`**：預設慣例為 `backend/go`；若專案 CLAUDE.md 另有宣告 `{BACKEND_DIR}`，以專案宣告為準。下文指令中的 `{BACKEND_DIR}` 皆同此解析。
+
 ```text
-backend/go/                      # ← 後端根目錄 (所有 Go 指令都在此執行)
+{BACKEND_DIR}/                   # ← 後端根目錄 (所有 Go 指令都在此執行)
 ├── cmd/
 │   ├── server/main.go           # API server 入口 (含 graceful shutdown)
 │   └── cli/main.go              # 管理腳本入口 (cobra CLI: migrate, init-data, create-admin)
@@ -105,9 +107,9 @@ backend/go/                      # ← 後端根目錄 (所有 Go 指令都在�
 5.  **文檔 (Documentation)**：立即為處理器添加 Swagger 註釋。
     -   **完整規範請讀取 [SWAGGER.md](references/SWAGGER.md)**：包含 Handler 註釋規範、`@Param` 語法、`@Success` 型別規範、完整範例、Request struct `example` tag 規則。
     -   在新增或修改任何 Handler 端點前，**必須**先讀取 `references/SWAGGER.md` 並遵循其中所有規則。
-    -   **生成指令**：`cd backend/go && make swagger`（修改後必須重新執行）
+    -   **生成指令**：`cd {BACKEND_DIR} && make swagger`（修改後必須重新執行）
 6.  **測試 (Testing)**：每次完成應用層 (Application Layer) 的實作後，**必須**執行單元測試並確認全部通過，再回報完成。
-    -   執行指令：`cd backend/go && make test`
+    -   執行指令：`cd {BACKEND_DIR} && make test`
     -   若有測試失敗，優先修正 Service 邏輯或測試案例，不可略過。
     -   新增 Service 方法時，同步在對應的 `*_service_test.go` 補充測試案例。
     -   涉及 Redis 的測試使用 `miniredis/v2` 作為 in-memory 替代。
@@ -162,7 +164,7 @@ backend/go/                      # ← 後端根目錄 (所有 Go 指令都在�
 -   **Redis Mock**：使用 `github.com/alicebob/miniredis/v2` 建立 in-memory Redis，不 mock 介面。
 -   **測試檔命名**：與被測 Service 同目錄，命名為 `<service>_test.go`，package 為 `service_test`。
 -   **必測案例**：每個 Service 方法至少涵蓋「成功路徑」與「主要失敗路徑（404/400/401）」。
--   **執行指令**：`cd backend/go && make test`
+-   **執行指令**：`cd {BACKEND_DIR} && make test`
 
 ### 9. 事務一致性 (Transactions)
 -   嚴禁在 Service 層進行「手動回滾」（如：先扣款，失敗再退款）。
@@ -198,7 +200,7 @@ backend/go/                      # ← 後端根目錄 (所有 Go 指令都在�
 2.  Cache miss 不是錯誤——記錄 `slog.Debug`，不記 `slog.Error`。
 3.  DB 事務提交成功後才操作 Redis（刪除緩存 / 發送隊列消息）。
 4.  所有 Key 必須設定 TTL，禁止永不過期的 Key（除非有明確的清理機制）。
-5.  Key 命名格式：`{service}:{entity}:{identifier}`，例如 `user:profile:123`。
+5.  Key 命名依 REDIS.md「Key 命名規範」：`{entity}:{type}:{identifier}`（例如 `product:detail:42`），應用級 prefix 由封裝自動附加。
 
 ---
 

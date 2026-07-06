@@ -12,7 +12,9 @@ echo "╚═══════════════════════�
 echo ""
 
 if [ -n "$CMUX_BUNDLE_ID" ] && command -v cmux >/dev/null 2>&1; then
-  exec cmux claude-teams --dangerously-skip-permissions "$@"
+  # 顯式 in-process：cmux claude-teams 預設注入 --teammate-mode auto（CLI 參數覆蓋 settings.json），
+  # auto 在 TMUX shim 下走 tmux 路徑，shim 不支援 respawn-pane（CC 2.1.201 實測）→ named spawn 必敗
+  exec cmux claude-teams --teammate-mode in-process --dangerously-skip-permissions "$@"
 else
   exec claude --dangerously-skip-permissions "$@"
 fi

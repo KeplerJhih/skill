@@ -10,7 +10,7 @@
 首次接手專案或發現 Swagger 無法訪問時，確認以下項目：
 
 - `go.mod` 包含 `github.com/swaggo/swag`、`github.com/swaggo/gin-swagger`、`github.com/swaggo/files`
-- `cmd/server/main.go` 有 `_ "shop/docs"` side-effect import 與 API 元資料註釋（`@title`、`@version`、`@host`、`@BasePath`、`@securityDefinitions.apikey`）
+- `cmd/server/main.go` 有 `_ "<module>/docs"` side-effect import（`<module>` 為該專案 go.mod 宣告的 module 名）與 API 元資料註釋（`@title`、`@version`、`@host`、`@BasePath`、`@securityDefinitions.apikey`）
 - `router.go` 在**非 release 模式**下掛載 `r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))`
 
 ---
@@ -136,5 +136,5 @@ func (h *UserHandler) List(c *gin.Context) { ... }
 
 ## 生成與驗證
 
-- **生成指令**：`cd backend/go && make swagger`（修改 Handler 註釋或 Request struct 後必須重新執行）
+- **生成指令**：`cd {BACKEND_DIR} && make swagger`（後端根目錄，預設 `backend/go`；修改 Handler 註釋或 Request struct 後必須重新執行）
 - **訪問位址**：`http://localhost:<port>/swagger/index.html`（僅 debug 模式可用，port 依 config 設定）

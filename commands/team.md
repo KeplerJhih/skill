@@ -1,25 +1,35 @@
 ---
-description: Agent Team 工作流程 — TeamCreate 多隊友協作，契約優先 + QA 驗證
+description: Agent Team 工作流程 — 官方 Agent Teams 多隊友協作，契約優先 + QA 驗證
 argument-hint: [需求描述]
 ---
 
 # Command: /team (Agent Team Workflow)
 
-此指令啟動 **官方 Agent Team 多 Claude 實例協作模式**（Claude Code ≥ 2.1.32）。作為 **Team Lead**，你的職責是分析需求、制定團隊藍圖、**先 `TeamCreate` 建立 team，再用 `Agent`（在 team context 內 / 或帶 `team_name`）spawn 出 teammate**。每位 teammate 是獨立 Claude Code session，自動取得 `SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet` 協作工具，可彼此 `SendMessage` 直接對話、共享 task list、自動 idle 通知。
+此指令啟動 **官方 Agent Teams 多 Claude 實例協作模式**（implicit team 機制，Claude Code ≥ 2.1.178）。作為 **Team Lead**，你的職責是：分析需求、制定團隊藍圖、建立共享 task list、並行 spawn teammate、事件驅動監督調度。每位 teammate 是獨立 Claude Code session，協作工具（`SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet`）**對 teammate 始終可用**，可彼此直接對話、共享 task list，完成 / idle 時自動通知 Lead。
 
 **⚠️ 核心原則：需求分類、契約優先、Mailbox 對話、品質門。** 嚴禁未獲用戶明確確認 (`Yes`/`Y`) 前啟動團隊。
 
-**🔑 與 `/doit` 區別**：`/doit` 是單人 Tech Lead 模式（你親自編碼）；`/team` 是多 Claude 實例團隊模式（teammate 自主協作，你監督調度）。
+**🔑 與 `/doit` 區別**：`/doit` 是單人 Tech Lead 模式（你親自編碼）；`/team` 是多 Claude 實例團隊模式（teammate 自主協作，你監督調度、不親自編碼）。
 
-**⚠️ 啟動機制（4 步順序，不可跳過）**：
-1. **`TeamCreate`** 建立 team — 建立 `~/.claude/teams/{team-name}/` 與對應 task list 目錄。**這是讓後續 spawn 出的 entity 變成 teammate（而非單向 subagent）的前置條件**。
-2. **`TaskCreate` × N** 建立任務（自動綁進這個 team 的 task list），用 `TaskUpdate` 設 `owner` + `addBlockedBy`。
-3. **`Agent`** spawn teammate — 必填 `name:`（要與 task `owner` 完全一致）+ `subagent_type:` + `model:` + 帶足上下文的 `prompt:`。**只要 Lead session 在 team context 內，spawn 出的就是 teammate**（不必顯式傳 `team_name`，runtime 自動繼承 current team）。回應格式 `agent_id: name@team-name` 即確認為 teammate。
-4. **`SendMessage(to: "<name>")`** 後續派工 — teammate 是常駐 Claude session，by-name 喚醒會延續原 context；**不要再 call `Agent({name: "<name>"})`**，那會起新實例丟失對話。
+**📐 最高原則：工具 schema 為準。** 啟動時先用 `ToolSearch` 載入協作工具 schema；本文檔的參數、格式、回應樣式與實際 schema / runtime 行為衝突時，**一律以實際為準**並照真實行為繼續，不要因文檔滯後而停手（harness 演進快，整套流程過時的教訓已發生過一次——TeamCreate 時代流程即為前例）。
 
-**🔑 致命陷阱（之前踩過的雷）**：
-- ❌ 跳過第 1 步直接呼叫 `Agent` → 起的是 **subagent 而非 teammate**，subagent runtime 完全沒有 SendMessage / TaskList 等協作工具，無法 mailbox 對話、無法操作共享 task list，整個 team workflow 假死
-- 區分方式：spawn 回應若是 `agentId: <hash>` → subagent 啟動失敗；若是 `agent_id: <name>@<team>` → teammate 正確
+**📖 官方文檔（權威參考）**：<https://code.claude.com/docs/zh-CN/agent-teams>（英文版把 `zh-CN` 換成 `en`）。遇到本文檔未涵蓋的故障、新行為或版本差異 → 用 `WebFetch` 抓官方文檔查證最新機制再行動；查證後發現本文檔已過時 → 依實際行為繼續任務，並在完成回報附「**工具箱優化建議**」段提出 team.md 修正方案，由用戶決定是否採納。
+
+---
+
+## 🧠 機制認知（implicit team，動手前先建立正確模型）
+
+| Runtime 事實 | 對 Lead 的意義 |
+|------|-----------|
+| session 啟動時 runtime **自動**建立本 session 的 team（`~/.claude/teams/session-<id>/`）與共享 task list（`~/.claude/tasks/session-<id>/`） | **沒有、也不需要 `TeamCreate` / `TeamDelete`**；每 session 恰好一個 team |
+| 用 `Agent` tool 帶 `name:` spawn 出的就是 teammate | spawn 回應 `agentId: <hash>` **= 正常成功**；把 name ↔ agentId 對照記進工作筆記 |
+| spawn 天生 async | **沒有 `run_in_background` 參數**（傳了會驗證錯誤）；spawn 立即返回，完成時自動通知 |
+| teammate 完成 / idle / 失敗都會**自動通知** Lead | **不要輪詢 `TaskList`**，事件驅動即可 |
+| 運行中 teammate 用 `SendMessage(to: "<name>")` 喚醒（context 延續）；**已完成的**改用 agentId | **不要**對同名再 call `Agent`——會起新實例、丟失原 context |
+| 隊友 model 省略時的行為隨 harness 版本變動（新版繼承 spawn 來源、舊版走「默認隊友模型」設定），別依賴 | 藍圖 roster 每位隊友**明確填 model** |
+| session 結束自動清理 team 目錄 | **沒有收尾清理步驟** |
+| Lead 固定 = 主 session；team 不可嵌套 | 隊友不能再開 team；跨領域子任務由 Lead 拆分 |
+| 高風險任務可 spawn 時帶 `mode: "plan"` | 隊友先規劃、送 plan_approval_request，Lead 批准後才動手 |
 
 ---
 
@@ -27,65 +37,31 @@ argument-hint: [需求描述]
 
 | 條件 | 檢查方式 | 不滿足時 |
 |------|---------|---------|
-| Claude Code ≥ 2.1.32 | `claude --version` | 退回 `/doit` |
-| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` | 看 `settings.json` 的 `env` | 提示用戶開啟 |
-| `~/.claude/agents/` 存在通用隊友類型（`backend` / `frontend` / `mobile` / `qa` / `code-reviewer`） | `ls ~/.claude/agents/` | 提示用戶補建或退回 `/doit` |
-| 終端環境（cmux / tmux / Claude 原生）spawn backend 可用 | 見下方「🖥️ 終端環境偵測」 | cmux 缺 shim → 停手要用戶重啟；其他環境直接繼續 |
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` | settings.json 的 `env` | 提示用戶開啟 |
+| 協作工具存在 | `ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"` | 缺任一 → 回報環境異常，退回 `/doit` |
+| `~/.claude/agents/` 存在所需隊友類型（`backend` / `frontend` / `mobile` / `qa` / `code-reviewer` / `devops`） | `ls ~/.claude/agents/` | 提示補建或退回 `/doit` |
+| 顯示模式合適 | 見下方「teammateMode」 | 依指引調整後再啟動 |
 
----
+### 🖥️ teammateMode（顯示模式決策）
 
-## 🖥️ 終端環境偵測（MANDATORY，前置條件後立即執行）
+teammate 顯示模式由 settings.json `teammateMode` 決定：
 
-`/team` 的 teammate 是用 Claude Code 內建 spawn 機制建立的，**底層 backend 隨終端環境變化**。Lead 啟動前必須先偵測，三種環境都是合法的 agent team 啟動方式，不需要降級或魔改：
+| 值 | 行為 | 適用性 |
+|----|------|--------|
+| `in-process`（官方預設，**建議**） | 隊友跑在主終端的 agent 面板（↑↓ 選隊友、Enter 進入對話、`x` 停止、Ctrl+T 看 task list） | **任何終端都可用**（含 cmux）；最穩 |
+| `tmux` / `auto` | 每位隊友獨立 split pane | 僅原生 tmux 或 iTerm2（+ `it2` CLI）。**cmux 的 tmux shim 已知不相容**（CC ≥ 2.1.201 的 `respawn-pane`，2026-07 實測）|
 
-### 偵測指令（一次 Bash 取得三件事）
+**spawn 失敗且錯誤訊息含 pane / tmux 字樣**（例：`Unsupported tmux compatibility command`）→ 這是顯示模式 / 終端相容性問題，不是 team 機制問題：**停手回報**，不要反覆重試。
 
-```bash
-echo "CMUX=${CMUX_AGENT_LAUNCH_KIND:-no}"  # cmux 環境會輸出 "claude"
-echo "TMUX=${TMUX:+yes}"                    # tmux session 內會輸出 "yes"
-which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs 系統）
-```
+**⚠️ CLI 參數優先於 settings.json（2026-07 實測踩坑）**：啟動指令帶了 `--teammate-mode` 就會覆蓋 settings.json，改設定、開新 session 都無效（該 session 內模式已鎖定）。cmux 的 `claude-teams` 啟動器**預設注入 `--teammate-mode auto`** 且設 TMUX shim → auto 走 tmux 路徑必敗。診斷：`ps -p <claude pid> -o command=` 看實際啟動參數。修法：啟動時顯式帶 `--teammate-mode in-process`（cmux 例：`cmux claude-teams --teammate-mode in-process`，多餘參數會 forward 給 claude 蓋掉其預設；專案 `run.sh` 範本已內建），或在無 TMUX shim 的一般終端跑純 `claude` 讓 settings.json 生效。
 
-### 環境矩陣與啟動方式
+> **隊友類型是語言中立的角色**：`backend` 可能對應 Go / Python / Node / PHP…，`frontend` 對應 React / Vue…，`mobile` 對應 iOS / Android / RN…。**實際載入哪個 skill 由隊友自己啟動時偵測技術棧後動態匹配**，不在這裡寫死。
 
-| 環境 | 偵測訊號 | spawn backend | Lead 行為 |
-|------|---------|--------------|----------|
-| **① cmux**（teams 模式） | `CMUX_AGENT_LAUNCH_KIND=claude` ∧ `which tmux` 路徑含 cmux 暫存目錄（非 `/opt/homebrew/bin/tmux` 等系統路徑） | cmux split（tmux shim 翻譯） | 走標準 4 步流程 |
-| **① cmux**（shim 未就位） | `CMUX_AGENT_LAUNCH_KIND=claude` ∧ `which tmux` 是系統 tmux 路徑 | ❌ spawn 失敗（會建出孤兒 tmux pane） | **立即停手**，依下方「cmux 未就緒復原訊息」回覆用戶 |
-| **② tmux** | 無 `CMUX_*` 變數 ∧ `$TMUX` 非空 | tmux pane | 走標準 4 步流程 |
-| **③ Claude 原生** | 無 `CMUX_*` 變數 ∧ 無 `$TMUX` | Claude Code 內建（依版本而定） | 走標準 4 步流程 |
+## 🛑 啟動閘門（輸出任何用戶可見文字之前，hook 會自動注入同樣提醒）
 
-### cmux 未就緒復原訊息（情況 ①\* 專用）
-
-偵測到「cmux 環境但 tmux shim 未就位」時，**禁止繼續往下走**（會 spawn 出無回應的 teammate），直接回覆用戶：
-
-> ⚠️ **偵測到 cmux 終端，但目前 Claude 不是用 cmux teams 模式啟動。**
->
-> 證據：
-> - `CMUX_AGENT_LAUNCH_KIND=claude` ✓
-> - `which tmux` = `<實際路徑>`（系統 tmux，非 cmux shim）
->
-> 在此狀態下 spawn 出的 teammate 不會跑在 cmux session 內，會永遠不回應。請依以下指令重啟：
->
-> ```bash
-> # 1. 退出當前 Claude（Ctrl+D 或 /exit）
-> # 2. 用 cmux 包裝的 teams 模式重啟並接回原對話
-> cmux claude-teams --continue
-> ```
->
-> 重啟後 PATH 上會自動有 cmux 的 tmux shim，再下 `/team` 即可正常 spawn teammate。
-
-### 啟動指令對照（供用戶參考）
-
-| 想用 | 啟動方式 |
-|------|---------|
-| cmux + agent team | `cmux claude-teams [--continue]` |
-| 原生 tmux + agent team | 先 `tmux new -s mywork`，內部 `claude` |
-| Claude 原生 agent team | 直接 `claude`（無 tmux / 無 cmux） |
-
-> **隊友類型是語言中立的角色**：`backend` 可能對應 Go / Python / Node / PHP / Ruby / Java / Rust，`frontend` 可能對應 React / Vue / Svelte / Astro 等，`mobile` 可能對應 iOS / Android / RN / Flutter。**實際載入哪個 skill 由隊友自己在啟動時偵測技術棧後動態匹配**，不在這裡寫死。
-
-讀取 `~/.claude/shared/workflow-base.md` 取得專案偵測規則、Serena 工具使用規範與 Skill 對照表，然後執行專案偵測。
+1. `ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"` 載入協作工具 schema（schema 為準，文檔滯後照實際行為走）
+2. `Read("~/.claude/shared/workflow-base.md")` 取得共用流程規範（任務類型分流、專案偵測、上下文檢索、Skill 載入、向用戶詢問與問題回報、藍圖偏離處理、停損原則、驗證觸發條件）
+3. `Skill(skill="karpathy-guidelines")`，再依任務內容匹配載入專屬 Skill（情境 A 可延後至取得需求後補做）
 
 ---
 
@@ -95,28 +71,25 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 
 **判定**：用戶僅輸入 `/team`，後面沒有描述。
 
-**行動**：
-1. 執行專案偵測，展示偵測結果並詢問：
+**行動**：執行輕量偵測（workflow-base「情境 A 輕量偵測與沿用」：只做步驟 0），展示偵測結果並詢問：
 
 > **您好！我是您的 Team Lead，準備為您組建 Agent Team。**
 >
 > **🔎 偵測結果**：`[從 workflow-base 步驟 0 取得，包含偵測到的技術棧]`
-> **🤝 可用隊友類型**：`[ls ~/.claude/agents/ 列出，例：backend, frontend, mobile, qa, code-reviewer]`
+> **🤝 可用隊友類型**：`[ls ~/.claude/agents/ 列出]`
 >
 > **請問需要處理什麼任務？**
 >
 > 1. ✨ **全端功能開發** - 後端 API + 前端介面 + QA 驗證
 > 2. 🔧 **後端功能開發** - 僅後端
 > 3. 🎨 **前端功能開發** - 僅前端
-> 4. 📱 **iOS 功能開發** - 原生 iOS
+> 4. 📱 **行動端功能開發** - iOS / Android / 跨平台
 > 5. 🐛 **跨端問題修復** - 多隊友協作診斷與修復
 > 6. ♻️ **架構重構** - 多隊友並行重構
 >
 > *請選擇一個項目，或直接描述您的具體需求。*
 
-2. **用戶回覆後**：進入情境 B 流程，但**跳過步驟 2（專案偵測）**，沿用情境 A 結果。
-
----
+用戶回覆後：進入情境 B 流程；偵測沿用依 workflow-base「情境 A 輕量偵測與沿用」（步驟 0 沿用、步驟 1/2 依任務類型照常）。
 
 ### 🔵 情境 B：用戶已提供需求
 
@@ -125,9 +98,9 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 **行動**：
 
 1.  **任務類型分流（MANDATORY）**：依 `workflow-base.md` 判定 Code / Config / Docs / Trivial。
-2.  **專案偵測**：依 `workflow-base.md` 執行（情境 A 已執行則跳過）。
+2.  **專案偵測**：依 `workflow-base.md` 執行（情境 A 已做步驟 0 則沿用，步驟 1/2 依任務類型照常）。
 3.  **上下文檢索**：依 `workflow-base.md` 按任務類型挑工具。
-4.  **Skill 載入（給 Lead 用）**：先載入 `karpathy-guidelines`，再依任務內容自動匹配。**注意**：Lead 載入的 Skill **不會繼承給隊友**，每個隊友的 subagent 定義中已要求自行載入。
+4.  **Skill 載入回查（給 Lead 用）**：啟動閘門已完成 `karpathy-guidelines` 與初次匹配載入，此處僅回查——分析至此浮現新領域則立即補載。**注意**：Lead 載入的 Skill **不會繼承給隊友**，每個隊友的 agent 定義已要求自行載入。
 5.  **⚠️ 需求分類判斷（MANDATORY）**：
 
     | 資料特性 | 判定 | 執行模式 |
@@ -145,29 +118,25 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 
     | 需要時機 | 對應隊友 (subagent type) |
     |---------|--------------------------|
-    | 🅱️ 模式：API / Domain / DB 變更 | `backend`（語言中立，隊友自己偵測 Go / Python / Node …） |
-    | 涉及頁面 / 組件 / 介面 | `frontend`（框架中立，隊友自己偵測 React / Vue …） |
-    | 涉及行動端（任意平台） | `mobile`（平台中立，隊友自己偵測 iOS / Android / RN …） |
+    | 🅱️ 模式：API / Domain / DB 變更 | `backend`（語言中立，隊友自己偵測） |
+    | 涉及頁面 / 組件 / 介面 | `frontend`（框架中立，隊友自己偵測） |
+    | 涉及行動端（任意平台） | `mobile`（平台中立，隊友自己偵測） |
+    | 涉及容器化 / K8s / IaC / CI/CD | `devops` |
     | 涉及前端畫面，需要 E2E 驗證 | `qa` |
     | 任務中等以上複雜度 | `code-reviewer`（最後階段啟動） |
 
-    **規模建議**：3–5 位隊友最佳。每位隊友 5–6 個 task 為理想負載。
+    **規模建議**：3–5 位隊友最佳，每位 5–6 個 task 為理想負載。
 
-7.  **🛰️ 技術棧偵測（MANDATORY，啟動 team 前）**：
-
-    Lead 在組建團隊**之前**必須完成：
-    - 確認從 CLAUDE.md / 標誌檔取得的後端目錄、前端目錄、行動端目錄（依任務需要）
-    - 不需要列出每個目錄的具體語言（隊友會自己偵測），但要把**目錄絕對路徑**準備好填入啟動指令
-    - 若專案僅有單一技術棧子目錄（例：純前端站、純後端 API）→ 在藍圖中明示，避免用戶困惑為何沒派 backend / frontend
-
-8.  **🔌 MCP 工具偵測**：依 `workflow-base.md`「🔌 MCP 工具動態偵測」掃描可用 MCP、匹配任務，結果納入藍圖，並在各隊友啟動 prompt 中標注分配給該隊友的 MCP 工具。
+7.  **🛰️ 技術棧偵測（MANDATORY，啟動 team 前）**：確認各隊友工作目錄的**絕對路徑**（隊友會自己偵測語言，Lead 只準備路徑）；專案僅單一技術棧時在藍圖明示，避免用戶困惑為何沒派某類隊友。
+8.  **🔌 MCP 工具偵測**：依 `workflow-base.md`「🔌 MCP 工具動態偵測」執行，結果納入藍圖，並在各隊友啟動 prompt 中標注分配給該隊友的 MCP 工具。
 9.  **過度設計檢查（MANDATORY，藍圖前最後一道）**：依 `workflow-base.md` 三題自審。
 
 ---
 
 ## 📋 團隊任務藍圖與確認 (MANDATORY)
 
-啟動 Agent Team 前，**必須**向用戶展示「團隊任務藍圖」並等待確認：
+啟動 Agent Team 前，**必須**向用戶展示「團隊任務藍圖」並等待確認。
+藍圖中的開放決策點、缺漏資訊與問題回報，依 `workflow-base.md`「🗣️ 向用戶詢問與問題回報規範」整理；視覺方案可用視覺化預覽輔助詢問。
 
 > ### 🏗️ 團隊任務藍圖：[任務簡稱]
 >
@@ -175,47 +144,39 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 > **📌 任務類型**：[Code / Config / Docs / Trivial]
 >
 > **🔍 上下文分析**
-> - **專案結構**：[Monorepo: backend/go/ + frontend/web/ ...]
+> - **專案結構**：[Monorepo: backend/ + frontend/ ...]
 > - **涉及路徑**：[相關檔案 / 目錄]
 > - **關鍵組件**：[Serena 找到的關鍵函式 / Entity / API]
 >
 > **🎯 執行目標**
-> - [目標 1]
-> - [目標 2]
+> - [目標 1] / [目標 2]
 >
 > **👥 團隊編制 (Team Roster)**
 >
-> | 隊友名稱 | Subagent Type | 工作目錄（依本次偵測填入） | 模型 |
-> |---------|--------------|--------------------------|------|
-> | `be-{feature}` | `backend` | `[偵測到的後端目錄絕對路徑]` | opus |
-> | `fe-{feature}` | `frontend` | `[偵測到的前端目錄絕對路徑]` | opus |
-> | `mb-{feature}` | `mobile` | `[偵測到的行動端目錄絕對路徑]` | opus |（若有）
-> | `qa-{feature}` | `qa` | — | opus |
-> | `cr-{feature}` | `code-reviewer` | — | opus |（最後階段，可選）
+> | 隊友名稱 | Subagent Type | 工作目錄（絕對路徑） | 模型 |
+> |---------|--------------|--------------------|------|
+> | `be-{feature}` | `backend` | `[後端目錄]` | [依任務填：opus / sonnet / haiku / fable] |
+> | `fe-{feature}` | `frontend` | `[前端目錄]` | [同上] |
+> | `qa-{feature}` | `qa` | — | [同上] |
+> | `cr-{feature}` | `code-reviewer` | — | [同上]（最後階段，可選） |
 >
-> > 隊友會在啟動時自行偵測技術棧並動態匹配 skill，**這裡不寫死語言**。
+> > 隊友**不會繼承** Lead 的模型——此欄必填。隊友啟動時自行偵測技術棧並動態匹配 skill，這裡不寫死語言。
 >
-> **🔌 MCP 工具**（動態偵測結果，僅列相關的）
+> **🔌 MCP 工具**（僅列相關的）
 > - `[mcp名稱]` — [用途]（分配給：[隊友名稱]）
 >
-> **📊 需求分類**：`🅰️ 純前端` / `🅱️ 後端先行` （標示判斷理由）
+> **📊 需求分類**：`🅰️ 純前端` / `🅱️ 後端先行`（標示判斷理由）
 >
 > **🚩 共享 Task List 結構**
->
-> *🅰️ 純前端範例*：
-> - 階段 A（owner: `fe-{feature}`）：[任務列表]
-> - 階段 B（owner: `qa-{feature}`，blocked-by: 階段 A）：[任務列表]
->
-> *🅱️ 後端先行範例*：
 > - 階段 A（owner: `be-{feature}`）：契約設計 → 實作 → 測試
 > - 階段 B（owner: `fe-{feature}`，blocked-by: 階段 A 契約任務）：依契約實作
 > - 階段 C（owner: `qa-{feature}`，blocked-by: 階段 B）：E2E 驗證
 >
 > **🔗 隊友溝通協定（Blackboard + Mailbox）**
-> - **契約檔**：`team/contracts/{feature}.api.md` （後端寫，前端 / iOS 讀）
-> - **場景檔**：`team/scenarios/{feature}.qa.md` （Lead 寫，QA 讀）
-> - **決策日誌**：`team/decisions/{feature}.log.md` （任何隊友可寫）
-> - **跨隊友訊息**：用 `SendMessage` 直接溝通，不需經 Lead
+> - **契約檔**：`team/contracts/{feature}.api.md`（後端寫，前端 / 行動端讀）
+> - **場景檔**：`team/scenarios/{feature}.qa.md`（Lead 寫，QA 讀）
+> - **決策日誌**：`team/decisions/{feature}.log.md`（任何隊友可寫）
+> - **跨隊友訊息**：`SendMessage` 直接溝通，不需經 Lead
 >
 > **⏱️ 預估規模**：[小 / 中 / 大]
 >
@@ -225,181 +186,201 @@ which tmux 2>/dev/null                       # 看 tmux 路徑（cmux shim vs �
 
 ## ✅ 執行階段 (Post-Confirmation)
 
-用戶確認後，**作為 Team Lead 依序執行**：
-
 ### 1. 準備共享資源
 
 - 確認 `team/contracts/`、`team/scenarios/`、`team/decisions/` 存在（不存在則建立）
 - 撰寫 QA 場景檔 `team/scenarios/{feature}.qa.md`（從藍圖目標展開為可驗證的用戶流程清單）
 - 若 🅱️ 模式：在 `team/contracts/{feature}.api.md` 留好骨架（標題 + 預期端點清單），後端隊友據此補完
 
-### 2. 啟動 Agent Team（4 步順序執行，不可跳過任一步）
+### 2. 啟動團隊（3 步 + pre-flight）
 
-#### 2-a. 載入協作工具到 Lead session
+#### 2-a. 協作工具 schema 校準
 
-`TeamCreate` / `SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet` / `TeamDelete` 是 deferred tools，先把 schema 拉進來：
+啟動閘門已載入協作工具 schema（若未載，此時補：`ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"`），以載回的 schema 校準本文檔認知（最高原則：schema 為準）。
 
-```
-ToolSearch query="select:TeamCreate,SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet,TeamDelete"
-```
+#### 2-b. 建立共享 task list
 
-#### 2-b. **`TeamCreate` 建立 team（關鍵步驟，跳過會整個崩盤）**
+依藍圖每階段建一個 epic task（不要把每個 sub-step 都拆出來，過細的 task 反而干擾隊友）。建議顆粒度：
 
-```
-TeamCreate {
-  team_name: "<feature>-team",   // 例：quote-force-team；用 kebab-case
-  description: "本次任務目的的一句話",
-  agent_type: "team-lead"
-}
-```
-
-成功會回傳 `team_file_path: ~/.claude/teams/<name>/config.json` + `lead_agent_id: team-lead@<name>`。**Lead session 自此進入 team context，後續 TaskCreate / Agent 自動使用該 team**。
-
-> ⚠️ 沒做這步直接 `Agent`，spawn 出來的是 subagent（無協作工具），整個 workflow 假死。這是 v1/v2 已經踩過的雷。
-
-#### 2-c. 建立共享 task list（指派 owner + blockedBy）
-
-依藍圖每階段建一個 epic task（不要把每個 sub-step 都拆出來；過細的 task 反而干擾 teammate）。建議顆粒度：
-
-- **後端**：1 個 epic + 1 個「補完 API 契約」 task（後者是獨立的 milestone，blocks 前端）
-- **前端**：1 個 epic（blocked-by 契約 task）
-- **行動端**：1 個 epic（blocked-by 契約 task，與前端並行）
+- **後端**：1 個 epic + 1 個「補完 API 契約」task（後者是獨立 milestone，blocks 前端 / 行動端）
+- **前端 / 行動端**：各 1 個 epic（blocked-by 契約 task，彼此並行）
 - **QA**：1 個 epic（blocked-by 前端 / 行動端 epic）
 
-每個 task 用 `TaskCreate` 建立後，立刻 `TaskUpdate` 設 `owner:` 與 `addBlockedBy:`。owner 字串必須與下一步即將 spawn 的 teammate `name:` 完全一致（例：`be-{feature}`）。
+每個 task 以 `TaskCreate` 建立後，用 `TaskUpdate` 設 `owner:`（**必須與即將 spawn 的隊友 `name:` 完全一致**）與 `addBlockedBy:`。更新既有 task 前先 `TaskGet` 取最新狀態，避免覆寫。
 
-#### 2-d. 並行 spawn teammate（用 Agent tool，但這次是在 team context 內）
+#### 2-c. Pre-flight 探針（新環境 / harness 版本更新後必做，其餘建議做）
 
-**用 `Agent` tool 一次發送多個 tool call** spawn 所有 teammate（單一訊息多 tool call = 並行）。每個 spawn 必填：
+正式 spawn 全 roster 前，先 spawn 一個 1-turn 便宜探針驗證 teammate 通道：
+
+```
+Agent { name: "probe", subagent_type: "general-purpose", model: "haiku",
+        prompt: "探針任務：呼叫 SendMessage(to: \"team-lead\", summary: \"probe OK\", message: \"OK\") 後結束回合，不做其他事。" }
+```
+
+> 探針用 `SendMessage` 回報而非純文字回覆——teammate 的純文字輸出 Lead **看不到**，
+> 讓探針發訊息可以一次驗證 spawn 通道 + mailbox 通道（2026-07 實測：只回純文字時 Lead 僅收到 idle 通知）。
+
+- 成功（返回 `agentId: <hash>`，收到 probe 的 SendMessage 或 idle 通知）→ 通道正常，繼續
+- 失敗且錯誤含 pane / tmux 字樣 → teammateMode 問題（見前置條件），**停手回報用戶**
+- 其他錯誤 → 如實回報，不要帶病 spawn 全 roster
+
+#### 2-d. 並行 spawn 全 roster
+
+**單一訊息多個 `Agent` tool call = 並行**。每個 spawn 的參數：
 
 | 參數 | 內容 |
 |------|------|
-| `subagent_type` | `backend` / `frontend` / `mobile` / `qa` |
-| `name` | 與 task owner 字串完全一致（例 `be-{feature}`） |
-| `model` | 依藍圖填（`opus` / `sonnet` / `haiku`） |
-| `run_in_background` | **必填 `true`**——否則 Lead 會被阻塞、無法後續調度 |
-| `prompt` | 自包含的 teammate 任務簡報，至少包含：本人名字、工作目錄、契約 / 場景 / 決策三檔絕對路徑、`TaskList` 後認領自己的 task、SSRF / 安全約束、idle 行為說明、回報格式 |
+| `subagent_type` | `backend` / `frontend` / `mobile` / `qa` / `devops` / `code-reviewer` |
+| `name` | 與 task owner 完全一致（例 `be-{feature}`） |
+| `model` | 依藍圖 roster 填（隊友不繼承 Lead 模型） |
+| `mode` | 可選；高風險任務填 `"plan"`（隊友先規劃、Lead 批准後動手） |
+| `prompt` | 自包含任務簡報，見 2-e |
 
-> ⚠️ **回應格式驗證**：spawn 後 runtime 回應必須是 `agent_id: <name>@<team-name>`（例：`be-quote-force@quote-force-team`）。若回應是 `agentId: <hash>` → 你**沒在 team context 內**或**忘了 TeamCreate**，spawn 出來的是 subagent，立即停手檢查。
+spawn 回應 `agentId: <hash>` = 成功；**把每位隊友的 name ↔ agentId 記下**（喚醒已完成隊友要用 agentId）。
 
-> ⚠️ **prompt 一定要自包含**：每個 teammate 是獨立 Claude session，看不到 Lead 的對話歷史。需要的所有上下文（路徑、約束、預設帳密策略、模型決策）都要寫進 prompt。
+#### 2-e. Teammate prompt 必含清單（每位都要，prompt 自包含）
 
-> ⚠️ **不要在 prompt 裡寫死 skill 名稱**：teammate `.md` 已要求自行偵測技術棧、動態載入 skill。
+teammate 是獨立 session，**看不到 Lead 的對話歷史**。prompt 至少包含：
 
-#### 2-e. 期間如何延續對話
+1. 本人名字 + 工作目錄絕對路徑
+2. 契約 / 場景 / 決策三檔的絕對路徑
+3. `TaskList` 後認領自己 owner 的 task
+4. 分配給它的 MCP 工具清單（名稱 + 用途）
+5. **溝通協定三鐵律**（見下）
+6. 驗收標準（量化）、不在範圍清單、安全約束；自驗依 workflow-base「🧪 驗證觸發條件」端到端原則（實際驅動被改流程，不只單元測試）
+7. 回報格式：完成時 `SendMessage(to: "team-lead")` 附技術棧偵測結果、載入的 skill 清單、改動檔案、自驗結果
+8. **停損與防空轉指令**（workflow-base「⛔ 停損原則」）：同一失敗連續 3 次修復未過 → 停修並 SendMessage 回報 Lead 裁決；TaskUpdate 被 hook 拒絕且自驗已通過 → 不反覆重試、不修改任何設定，直接 SendMessage 回報 Lead 調處（2026-07 實測：hook 拒絕回饋可能重複投遞，無此指令隊友會被反覆喚醒空轉）
 
-teammate spawn 後跑到 idle / 完成（idle 是常態，不是錯誤）。**要派新任務或補資訊**：
+> ⚠️ **不要在 prompt 裡寫死 skill 名稱**：teammate 的 agent 定義已要求自行偵測技術棧、動態載入 skill。
 
-- ✅ `SendMessage(to: "<name>", message: "...")` ── 同一個 teammate context 延續，by-name 喚醒
-- ❌ 再 call `Agent({name: "<name>", ...})` ── 起全新實例、丟失原 context
+### 3. 溝通協定三鐵律（寫進每位 teammate 的 prompt）
 
-#### 2-f. 溝通協定（寫進每位 teammate 的 prompt）
+1. **純文字輸出其他 agent 看不到**——跨 agent 溝通一律 `SendMessage`（訊息為字串時**必帶 `summary`**）；回報 Lead 用 `to: "team-lead"`，隊友互傳用 `to: "<name>"`（前端 / 行動端遇契約缺項直接找 `be-{feature}`，QA 失敗直接派修對應隊友，不必經 Lead）
+2. **任務狀態一律 `TaskUpdate`**——更新前先 `TaskGet` 取最新狀態；想加任務用 `TaskCreate` + 適當 `addBlocks` / `addBlockedBy`
+3. **完工 = 回報 + task completed + 自然結束回合**——idle 不是死亡，Lead 隨時可喚醒；**禁止**為「保持在線」sleep / 輪詢空轉
 
-- teammate 在 team context 內**自動有** SendMessage / TaskList / TaskCreate / TaskUpdate / TaskGet — 不必教它們 ToolSearch
-- 前端 / 行動端遇契約缺項 → 直接 SendMessage 給 be-{feature}，不必經 Lead
-- QA 失敗 → 由 qa-{feature} 自行分析並 SendMessage 派修對應隊友
-- 任何 teammate 想加任務 → TaskCreate + 適當 addBlocks / addBlockedBy
+### 4. 監督與調度（事件驅動）
 
-#### 2-g. Dev server 生命週期（小雷）
+- 隊友完成 / idle / 失敗會**自動通知**——收到通知才行動，**不輪詢 TaskList**
+- 收到完工回報 → 檢視、明確 ack（接受 / 拒絕 deviation）→ 派下一件事或讓它 idle
+- 收到隊友提問（Mailbox）→ 處理後回覆
+- 喚醒：運行中 / idle 用 `SendMessage(to: "<name>")`；已完成（通知顯示 completed）用 agentId；**永遠不要**對同名再 call `Agent`
+- task 狀態偶爾滯後（官方已知限制）：疑似卡住時先 `TaskGet` 確認實際狀態，必要時代為更新並推隊友一把；`TaskGet` 的 `Blocked by` 列原始依賴（含已完成者），判斷可否認領以 `TaskList`（只列未解阻塞）為準
+- 執行中需變更團隊編制、需求分類翻轉或動到藍圖外範圍 → 依 workflow-base「⚠️ 藍圖偏離處理」暫停，回報用戶 delta 藍圖，重新確認後續行
+- 品質門可由 hooks 承擔（`TeammateIdle` / `TaskCreated` / `TaskCompleted`，exit 2 = 擋下並回饋），已配置者無需 Lead 手動把關同類問題
+- 全部完成 →（可選）啟動 `cr-{feature}` 代碼審查 → 完成回報
 
-`backend.md` / `frontend.md` 教 teammate idle 時自啟 dev server 在 background bash。但**那個 bash 綁在 teammate process 上**，teammate 一結束（或 reaper 收）bash 也跟著死。因此：
+### 5. 錯誤處理迴圈
 
-- 若 QA 是「下一輪」才 spawn / 喚醒，Lead 進 QA 階段前要自己重啟雙端 server
-- 或在 teammate prompt 中**改成回報 server 啟動指令而非自己啟動**，由 Lead 在自己 session 起 background bash（pid 不會隨子 agent 死）
+QA 失敗時**優先讓隊友自主處理**：QA 依其定義自行分析失敗層級並 `SendMessage` 派修對應隊友，修復後 QA 重驗。派修循環受 workflow-base「⛔ 停損原則」約束：同一失敗連續 3 次修復未過 → 上報 Lead 裁決，不無限循環。Lead 只在以下情況介入：場景設計本身有問題、跨多端衝突、隊友卡住超過合理時間。
 
-### 3. 監督與調度
+### 6. Dev server 生命週期
 
-- 用 `TaskList` 定期檢查進度
-- 收到隊友 idle 通知 → 確認任務完成、檢視回報
-- 收到 Mailbox 訊息（隊友需要 Lead 介入）→ 處理後回覆
-- 全部完成 → （可選）啟動 `cr-{feature}` 跑代碼審查 → 撰寫完成回報 → **清理團隊**
+teammate 起的 background bash 綁在該 teammate 的 runtime 上，跨階段存活性沒有保證。**長活的 dev server / docker compose 建議由 Lead 在自己 session 起 background bash**；或讓 teammate 在回報中附啟動指令，由 Lead 決定是否代起。進 QA 階段前，Lead 確認雙端 server 實際在跑（`lsof` / `curl` 驗證，不要assume）。
 
-### 4. 錯誤處理迴圈
+### 7. 完成回報
 
-QA 失敗時，**優先讓隊友自主處理**：
-- QA 隊友依其定義會自己 SendMessage 派回對應隊友
-- Lead 只在以下情況介入：場景設計本身有問題、跨多端的衝突、隊友卡住超過合理時間
-
-需要 Lead 介入時：
-- 用 `SendMessage(to: "<name>", message: "...")` 直接派任務給**仍可被 by-name 喚醒的**已存在隊友（避免失去上下文）
-- 隊友 idle 之後 SendMessage 仍能投遞到 inbox，下次它被喚醒時看到
-- **不要**再 call `Agent({name: "<name>", ...})`——那會 spawn 全新實例、丟掉所有先前對話
-- 修復後讓 QA 隊友重跑驗證（同樣用 SendMessage 喚醒）
-
-### 5. 完成回報
-
-**回報前先執行**：依 `workflow-base.md`「📋 CLAUDE.md 一致性檢查」對照本次變更，找出地圖漂移時加「📋 CLAUDE.md 更新建議」段。
+**回報前先執行收尾雙檢**（依 `workflow-base.md`）：
+1. 「📦 完成後沉澱檢查」——有可沉澱知識時在回報末尾提沉澱建議並詢問用戶
+2. 「📋 CLAUDE.md 一致性檢查」——地圖漂移時加「📋 CLAUDE.md 更新建議」段
 
 > ### ✅ 團隊任務完成報告
 >
-> **偵測結果**：[依藍圖中記錄的偵測結果填入]
+> **偵測結果**：[依藍圖記錄填入]
 >
 > **修改的檔案清單**
-> - Backend（[偵測到的技術棧]）: [檔案列表]
-> - Frontend（[偵測到的框架]）: [檔案列表]
-> - Mobile（[偵測到的平台]）: [檔案列表]（若有）
->
-> **新增的測試案例**
-> - [測試案例列表]
+> - Backend（[實際偵測技術棧]）: [檔案列表]
+> - Frontend（[實際偵測框架]）: [檔案列表]
+> - Mobile / DevOps（若有）: [檔案列表]
 >
 > **測試結果**
-> - `make test`：[pass/fail 數量]
-> - QA E2E：[PASS/FAIL]
+> - 後端測試：[pass/fail 數量]；QA E2E：[PASS/FAIL]
 >
 > **API 契約變更**
-> - 契約檔：`team/contracts/{feature}.api.md`
-> - [新增 / 修改的端點列表]
+> - 契約檔：`team/contracts/{feature}.api.md`；[新增 / 修改端點列表]
 >
 > **重要決策**（從 `team/decisions/{feature}.log.md` 摘錄）
-> - [決策列表]
 >
 > **各隊友偵測結果與載入的 Skill**（彙整自各隊友回報）
-> - be-{feature}（後端：[實際偵測技術棧]）: [skill 清單]
-> - fe-{feature}（前端：[實際偵測框架]）: [skill 清單]
-> - mb-{feature}（行動端：[實際偵測平台]）: [skill 清單]（若有）
-> - qa-{feature}: [skill 清單]
-> - cr-{feature}: [skill 清單]（若有）
 
-### 6. 清理團隊（最後一步，2 段流程）
+### 8. 收尾
 
-#### 6-a. 對每位 teammate 發 `shutdown_request`
+**沒有清理步驟**——session 結束時 runtime 自動清理 team 目錄。若想提前優雅釋放某隊友，可發 `shutdown_request`（teammate 回 `shutdown_response { approve: true }` 後退出），非必要。
 
-```
-SendMessage {
-  to: "<teammate-name>",
-  message: { type: "shutdown_request", reason: "task completed" }
-}
-```
+**⚠️ 關閉前先調處 task 狀態**（2026-07 實測）：隊友退出時其名下**未完成** task 會被自動取消指派（owner 清空），任務板留下無主的 in_progress。順序：先把該隊友的 task 標到正確狀態（completed / 重派），再發 `shutdown_request`。
 
-teammate 收到後 idle 並回 `shutdown_response { approve: true }`，然後優雅退出。每位都要單獨發一次。
+---
 
-#### 6-b. `TeamDelete` 移除 team 目錄
+## 🧭 Lead 心法（協調者紀律）
 
-```
-TeamDelete {}
-```
+### 角色定位：你是協調者，不是執行者
 
-無參數（會用 current team context）。會清掉 `~/.claude/teams/<name>/` 與 `~/.claude/tasks/<name>/`。
+| Lead 該做 | Lead 不該做 |
+|---|---|
+| 規劃藍圖、寫共享資源（contracts / scenarios） | **親自寫業務代碼**（那是 teammate 的事） |
+| TaskCreate / 派工 / 收回報 / ack deviation | **親自跑 build / 測試 / kill server**（派工給隊友） |
+| 監督進度、處理跨隊友衝突 | **親自做隊友已 in_progress 的工作** |
+| Spec 不清時補充 / 調整 | **越過隊友 ownership 直接改它的代碼** |
 
-> ⚠️ **TeamDelete 會在仍有 active teammate 時失敗** — 必須先全部 shutdown。
-> ⚠️ 必須由 Lead 執行清理。Teammate 不應執行清理。每個 session 一次只能管理一個 team，下次任務開始前要先清。
+**反例（已踩過）**：隊友卡住，Lead 直接 Bash kill process + 重啟 server（正解：SendMessage 派工）；隊友編輯到一半，Lead 看到 diagnostic error 就去修（正解：等隊友自己接續）。**自查**：每次想 call Bash / Edit / Write 前先問「這是不是某個 teammate 的 ownership？」是 → SendMessage 派工。
+
+### 互動原則
+
+- **idle 是常態，勿擾**：teammate 每回合結束都會 idle；idle ≠ 卡住 ≠ 完成。只在派新工或回應提問時 SendMessage
+- **deviation 要明確 ack**：隊友偏離 spec 並附理由時，明確回「接受（理由）」或「拒絕（請改回）」；沉默會讓隊友不確定要不要改
+- **CLAUDE.md 過時時相信代碼**：隊友抓出文檔與代碼不符 → 代碼是 source of truth，ack + 完成回報加「📋 CLAUDE.md 更新建議」
+
+### Spec 寫作三原則（防 deviation）
+
+1. **單一真相**：同一設定只寫一處明確值 + 理由（反例：一處寫 default true、另一處寫上線保 false → 隊友必選一個，你被迫接受 deviation）
+2. **驗收量化**：❌「測試覆蓋核心路徑」→ ✅「`go test ./... -race` 全綠 + 新增 N 類測試：[列舉]」
+3. **明確「不在範圍」**：列出本次絕不碰的端 / 模組 / 階段，防 scope creep
+
+### 環境細節事先驗證
+
+派工前先 grep / lsof / ps 驗證，別讓隊友撞牆才發現：dev server 在跑嗎、哪個 port；`.env` 改了會 reload 嗎（如 air 只 watch `*.go`）；docker 容器是否被其他專案借用 port；prod 與 local 版本是否一致（不一致要明確告知 QA 測哪邊）。
+
+### /team vs /doit 決策
+
+| 情況 | 工具 |
+|---|---|
+| 任務範圍明確、單一技術棧、可 surgical 解決 | `/doit` |
+| 純 research 不寫代碼 | 直接 `Agent` spawn 研究型 subagent（不需 team） |
+| 跨多端需要契約對齊 / 有獨立可並行任務 / 需要 QA E2E | `/team` |
+
+**Token 成本警告**：`/team` 比 `/doit` 高 3–5 倍。需求分類沒做、純前端開了 team = 純粹浪費。
+
+### Spawn 前 checklist
+
+- [ ] 協作工具 schema 已載入（ToolSearch）？
+- [ ] task list 設好 owner + blockedBy？owner 與 name 完全一致？
+- [ ] 每個 teammate prompt 自包含（目錄、契約路徑、三鐵律、驗收標準、不在範圍）？
+- [ ] 共享資源（contracts / scenarios / decisions）寫好了？
+- [ ] Spec 單一真相、驗收量化？
+- [ ] 環境細節驗證過（server / port / reload 機制）？
+- [ ] 真的每個角色都需要嗎（純後端就別喚醒 fe / mobile）？
+- [ ] Pre-flight 探針跑了嗎（新環境 / 版本更新後）？
 
 ---
 
 ## 🛡️ 已知限制與對應
 
-| 限制 | 對應方式 |
+以下摘自[官方文檔](https://code.claude.com/docs/zh-CN/agent-teams#limitations)（限制隨版本變動，遇到表外異常先回官方文檔對照最新版）：
+
+| 限制（官方文檔載明） | 對應方式 |
 |------|---------|
-| 每 session 只能一個 team | 每次 `/team` 結尾必須清理 |
-| 不能巢狀 team（隊友不能再開 team） | 跨領域子任務由 Lead 拆，不要讓隊友自開 team |
-| `/resume` 不還原 in-process 隊友 | 長任務建議 tmux 模式 |
-| Token 成本明顯較高 | 「需求分類」必做，純前端絕對不開 team |
-| Project-level team config 不存在 | 隊員配置每次由 Lead 動態建立，不能預先 hardcode |
+| in-process 隊友不支援 `/resume` / `/rewind` 還原 | 恢復 session 後隊友已不存在 → 重新 spawn，不要對舊 name 發訊息 |
+| task 狀態可能滯後 | 疑似卡住先 TaskGet 確認實際，必要時 Lead 代更新 |
+| 每 session 恰好一個 team、不可嵌套、Lead 固定 | 跨領域子任務由 Lead 拆，隊友不開 team |
+| in-process 隊友不能起 background subagent | 隊友的並行需求由 Lead 層安排 |
+| 權限模式在 spawn 時繼承 Lead | 常用操作先在權限設定預批，減少提示冒泡 |
+| Token 成本明顯較高 | 「需求分類」必做，純前端絕不開 team |
+| 訊息投遞可能延遲 / 失序；hook 拒絕回饋可能重複投遞喚醒隊友（2026-07 實測，非官方文檔項）| 隊友 prompt 必含防空轉指令（見 2-e 第 8 點）；Lead 收到「未收到裁決」類訊息先假設投遞延遲，重送一次即可，勿多發；狀態疑似滯後用 `TaskGet` 對賬 |
 
 ---
 
 ## 🆘 隊友定義缺失時
 
 若 `~/.claude/agents/` 缺所需 subagent type：
-1. 提示用戶可建立檔案（範本參考其他 ~/.claude/agents/*.md）
+1. 提示用戶可建立檔案（範本參考其他 `~/.claude/agents/*.md`）
 2. 或退回 `/doit` 改由你親自處理

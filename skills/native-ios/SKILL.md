@@ -13,6 +13,8 @@ color: blue
 
 **讀取專案架構文件**：使用 `Read` 工具讀取 `native/ios/docs/` 目錄下的所有 `.md` 文件，以了解現有專案的架構、服務、元件與設計系統。
 
+> **綠地專案例外**：若 `native/ios/` 或其 `docs/` 目錄尚不存在（全新專案），跳過此步驟，直接依本 skill 的「專案結構」與規範初始化專案，並建議同步建立 `native/ios/docs/architecture.md` 供後續開發參照。
+
 ```
 必讀文件：
 - native/ios/docs/architecture.md  — 專案架構總覽、目錄結構、核心服務、設計系統

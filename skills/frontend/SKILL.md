@@ -5,7 +5,7 @@ description: 構建可擴展、高效能且可維護的 React/TypeScript 前端�
 color: green
 ---
 
-此技能專注於本專案的前端工程 (Frontend Engineering) 核心原則，確保 React 應用程式在各類裝置（手機、平板、桌面）上的品質、效能與一致性。
+此技能專注於 React 前端工程 (Frontend Engineering) 核心原則，確保 React 應用程式在各類裝置（手機、平板、桌面）上的品質、效能與一致性。適用於任何專案；下述目錄路徑為**預設慣例**，若專案 CLAUDE.md 另有宣告則以專案為準。
 
 ## 🛠️ 專案技術堆疊
 
@@ -18,6 +18,8 @@ color: green
 - **Lucide React** (圖示庫)
 
 ## 📂 目錄結構
+
+預設慣例路徑為 `frontend/main/`（專案 CLAUDE.md 可覆蓋）：
 
 ```text
 frontend/main/src/
@@ -71,7 +73,7 @@ make install  # 安裝依賴
 ✅ 完成需求後的必要步驟 (DoD)
 在提交前端變更前，Tech Lead 必須確認以下項目：
 1. 代碼質量：
-執行 cd frontend/main && make lint 且無錯誤。
+在前端目錄（預設 frontend/main）執行 make lint 且無錯誤。
 無未使用的變數或 any 型別。
 2. RWD 跑版檢查 (必做)：
 [ ] 斷點過渡：手動縮放視窗，確認從 375px 到 1920px 內容無重疊。

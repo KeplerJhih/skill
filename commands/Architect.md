@@ -5,7 +5,7 @@ argument-hint: [架構需求或既有圖檔]
 
 # Command: /Architect (Architecture Diagram Workflow)
 
-此指令用於啟動 **架構圖設計與優化流程**。你的角色是 **Team Leader（架構師兼協調者）**：分析需求、透過 iTerm2 + tmux 多視窗動態召集領域專家 Agent 並行研究，彙整結果後透過 Draw.io MCP 完成架構圖。
+此指令用於啟動 **架構圖設計與優化流程**。你的角色是 **架構師兼協調者**：分析需求、動態召集領域專家 subagent 並行研究，彙整結果後透過 Draw.io MCP 完成架構圖。
 
 **⚠️ 核心原則：思考先行、方案確認、批准後動。** 嚴禁在未獲得用戶明確確認 (`Yes`/`Y`/`y`) 前進行任何圖表修改。
 
@@ -13,10 +13,7 @@ argument-hint: [架構需求或既有圖檔]
 
 ## 🔧 工具鏈 (Toolchain)
 
-- **Team 協作**：使用 `TeamCreate` 建立團隊，透過 tmux 在 iTerm2 中開啟多視窗並行協作
-- **Agent 管理**：使用 `Agent tool` 搭配 `team_name` 參數生成 teammate，每位專家在獨立 tmux pane 中運作
-- **訊息通訊**：使用 `SendMessage` 與專家 Agent 進行通訊協調
-- **任務追蹤**：使用 `TaskCreate` / `TaskUpdate` / `TaskList` 追蹤各專家研究進度
+- **專家研究**：使用 `Agent tool` 並行 spawn 研究型 subagent（**單一訊息多個 tool call = 並行**）。專家是一次性研究角色，**final message 即研究結論**，完成時自動通知並回到你手上——不需要 team / mailbox / 共享 task list
 - **Draw.io 繪圖**：使用 `Skill tool` 載入 `drawio-optimizer` skill 取得 Draw.io 最佳實踐（配色、佈局、連線防重疊、XML 模板等），再使用 Draw.io MCP 工具繪製
 - **檔案操作**：使用 Read / Grep / Glob / Bash 等工具讀取與分析現有 `.drawio` 檔案
 
@@ -98,7 +95,7 @@ argument-hint: [架構需求或既有圖檔]
 **命名規則**：Teammate 名稱直接使用對應的 skill 名稱（如 skill 為 `gcp-architect`，Teammate 就命名為 `gcp-architect`）。
 
 **判斷原則**：
-- 若需求僅涉及圖表繪製（佈局、配色、分組），**不召集專家，不建立 Team**，直接進入階段一
+- 若需求僅涉及圖表繪製（佈局、配色、分組），**不召集專家**，直接進入階段一
 - 若需求涉及架構決策（技術選型、服務拆分、部署規劃），根據涉及的領域從可用 skill 中選擇對應專家
 - 專家數量依需求而定，**不貪多**，只召集真正需要的
 - **嚴禁虛構不存在的 skill 或專家**。不確定某 skill 是否存在時，不要召集
@@ -138,54 +135,23 @@ argument-hint: [架構需求或既有圖檔]
 >
 > **🖥️ 協作方式**
 >
-> 確認後將自動在終端開啟 **[N] 個並行視窗**，每位專家獨立研究。
+> 確認後將並行啟動 **[N] 個研究 agent**（背景執行，可在終端 agent 面板觀察進度）。
 > 你不需要手動操作，專家完成後我會彙整結果並產出架構方案。
->
-> > 💡 如需觀察進度，可用 `Ctrl+B` + `↑↓` 切換視窗。
 >
 > **⚠️ 輸入 `Y` 確認開始，或提出調整意見。**
 
 **🔒 等待用戶確認 (`Y`/`Yes`/`y`) 後才繼續。嚴禁跳過此確認步驟。**
 
-### 4. 建立 Team 與 tmux 多視窗環境
+### 4. 並行生成專家 subagent
 
-用戶確認後，依序執行：
-
-#### Step 4a：建立 Team
-
-使用 `TeamCreate` 建立團隊：
-
-```
-TeamCreate:
-  team_name: "architect-{timestamp}"
-  description: "架構圖設計：{需求摘要}"
-  agent_type: "architect-lead"
-```
-
-#### Step 4b：建立任務清單
-
-使用 `TaskCreate` 為每位專家建立研究任務：
-
-```
-TaskCreate:
-  title: "[專家名稱] 架構研究"
-  description: "研究範圍：{具體問題}..."
-```
-
-#### Step 4c：並行生成 Teammate（tmux 多視窗）
-
-使用 `Agent tool` 搭配 `team_name` 和 `name` 參數，**在單一訊息中並行生成所有專家**。
-每位專家會自動在 iTerm2 的獨立 tmux pane 中啟動：
+用戶確認後，**在單一訊息中並行發出多個 `Agent` tool call**（每位專家一個）。spawn 是 async 的，回應 `agentId: <hash>` 即成功，完成時會自動通知你：
 
 ```
 Agent tool (並行發出多個):
-  name: "[teammate-name]"       # 必須使用上方表格中的 Teammate 名稱
-  team_name: "architect-{timestamp}"
+  name: "[teammate-name]"       # 使用上方表格中的名稱（顯示用標籤）
   subagent_type: "general-purpose"
   prompt: |
-    你的角色：[領域]架構顧問
-    你是 Team "architect-{timestamp}" 的成員，名稱為 "[teammate-name]"。
-    任務類型：純研究，不修改任何檔案。
+    你的角色：[領域]架構顧問。這是一次性研究任務，不修改任何檔案。
 
     首先使用 Skill tool 載入 [對應 skill 名稱]，然後開始研究。
 
@@ -198,31 +164,15 @@ Agent tool (並行發出多個):
     3. 分層建議（哪些元件屬於同一層級）
     4. 需要注意的風險或取捨
 
-    完成後：
-    1. 使用 TaskUpdate 將你的任務標記為 completed
-    2. 使用 SendMessage 將研究結果發送給 Team Leader
-
-    輸出格式：結構化文字，方便彙整為架構圖。
+    輸出格式：你的 final message 就是研究結論（結構化文字，方便彙整為架構圖），
+    不需要呼叫任何協作 / 訊息工具。
 ```
-
-**關鍵**：
-- 每位 Agent 在 iTerm2 中會顯示為獨立的 tmux pane
-- 用戶可在 iTerm2 中即時觀察每位專家的研究進度
-- 所有專家並行工作，透過 `SendMessage` 回報結果
 
 ### 5. 接收與彙整專家結果
 
-- 專家完成研究後會透過 `SendMessage` 自動回報結果
-- 使用 `TaskList` 確認所有研究任務均已完成
-- Team Leader 彙整各方建議，進入階段一
-
-### 6. 清理 Team 資源
-
-專家研究完成、結果已彙整後：
-
-1. 使用 `SendMessage` (type: `shutdown_request`) 依序關閉每位專家
-2. 所有專家關閉後，使用 `TeamDelete` 清理團隊資源
-3. tmux panes 自動關閉
+- 專家完成時 runtime **自動通知**，研究結論就在其回傳結果中——**不需輪詢、不需 SendMessage**
+- 全部到齊後彙整各方建議，進入階段一
+- 專家即用即回收，**沒有任何清理步驟**
 
 ---
 
@@ -332,27 +282,17 @@ Agent tool (並行發出多個):
 2. **不破壞現有內容**：更新圖表時，僅修改目標頁面，嚴禁影響其他頁面。
 3. **Skill 按需載入**：繪圖前載入 `drawio-optimizer` 取得最佳實踐，涉及特定平台時載入對應 skill（如 `gcp-architect`）。不在此 command 中寫死任何繪圖細節。
 4. **先分析後動手**：對架構圖的結構、層級有疑問時，展示選項讓用戶選擇。
-5. **Team 生命週期管理**：專家研究完成後必須 shutdown 所有 teammate 並 TeamDelete，避免殘留 tmux pane。
-6. **純圖表操作不建 Team**：僅佈局/配色等簡單操作時，Team Leader 自行處理，不啟動 tmux 多視窗。
+5. **專家即用即回收**：研究 subagent 回傳結論即結束，無需 shutdown 或清理。
+6. **純圖表操作不召集專家**：僅佈局/配色等簡單操作時，自行處理，不啟動並行研究。
 
 ---
 
-## 🖥️ tmux 操作提示（僅在用戶詢問時展示）
-
-以下資訊**不主動展示**給用戶，僅當用戶問「怎麼切換視窗」時才告知：
-
-- 切換視窗：`Ctrl+B` + 方向鍵
-- 放大單一視窗：`Ctrl+B` + `Z`
-- 列出所有視窗：`Ctrl+B` + `W`
-- 捲動查看歷史：`Ctrl+B` + `[`
-
-### 內部協作流程（不向用戶展示）
+## 內部協作流程（不向用戶展示）
 
 1. 需求解析 → 專家判斷 → **展示方案等用戶確認 (Y)**
-2. TeamCreate → TaskCreate → 並行生成 Teammate
-3. 專家並行研究 → SendMessage 回報 → Team Leader 彙整
-4. Shutdown 專家 → TeamDelete → **產出方案等用戶確認 (Y)**
-5. 載入 drawio-optimizer skill → Draw.io 製圖 → **預覽等用戶確認 (Y)**
-6. 寫入檔案
+2. 並行生成專家 subagent → 完成自動通知 → 彙整結論
+3. **產出方案等用戶確認 (Y)**
+4. 載入 drawio-optimizer skill → Draw.io 製圖 → **預覽等用戶確認 (Y)**
+5. 寫入檔案
 
-ARGUMENTS: 作為 Team Leader 透過 iTerm2 + tmux 多視窗動態召集領域專家並行研究，彙整架構建議後透過 Draw.io MCP 建立或優化架構圖，經多道審批確認後寫入檔案
+ARGUMENTS: 作為架構師兼協調者動態召集領域專家 subagent 並行研究，彙整架構建議後透過 Draw.io MCP 建立或優化架構圖，經多道審批確認後寫入檔案

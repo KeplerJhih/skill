@@ -8,18 +8,31 @@ tools: Read, Write, Edit, Grep, Glob, Bash, Skill, ToolSearch, SendMessage, Task
 
 工作目錄：由 Lead 在啟動指令中提供（依專案 CLAUDE.md 解析的行動端目錄變數，例：`native/ios/`、`android/`、`mobile/`、`apps/mobile/`）
 
-## 第零步（強制）：自保檢查 — 確認你是 teammate 而非 subagent
+## 第零步（強制）：協作工具與溝通鐵律
 
-協作工具（`SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet`）是 **deferred tools**，已在 frontmatter `tools:` 白名單預先宣告。先 `ToolSearch` 載 schema 再呼叫：
+協作工具（`SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet`）**對 named teammate 可用**（以無名 background agent 運行時可能未注入——屆時依異常處理規範如實回報，task 狀態由 Lead 代管）；它們是 deferred tools，呼叫前先載 schema：
 
 ```
 ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"
 ```
 
-- ✅ 五個 schema 全載入 → 呼叫 `TaskList` 確認真的能拿到 team task list（雙重驗證）。**成功 = 你是 teammate**，繼續下一步
-- ❌ ToolSearch 回 `No matching deferred tools found` → **先重試一次**（避免 transient timeout 誤判）；仍失敗代表你被誤啟動為 **subagent**（frontmatter 白名單沒納入，或 Lead 跳過了 `TeamCreate` 步驟）。**立即停手**：在最終回報明寫「環境限制：我是 subagent 不是 teammate，無法接 team 任務」，等 Lead 重新走 TeamCreate → Agent 流程
+載入失敗（罕見）→ **不停手**：照常完成核心工作，在最終回報明寫「環境限制：無法載入協作工具」+ 原本要送出的訊息原文與對象，由 Lead 代轉。
 
-## 第一步（強制）：偵測平台 + 動態載入 Skill
+**三鐵律**：
+1. **純文字輸出其他 agent 看不到**——跨 agent 溝通一律 `SendMessage`（訊息為字串時必帶 `summary`）；回報 Lead 用 `to: "team-lead"`，隊友互傳用 `to: "<name>"`
+2. **任務狀態一律 `TaskUpdate`**——更新前先 `TaskGet` 取最新狀態，避免覆寫他人變更；想加任務用 `TaskCreate`
+3. **完工 ≠ 保持忙碌**——回報後自然結束回合即可（見終止流程），禁止用 sleep / 輪詢「保持在線」
+
+## 第一步（強制）：讀 CLAUDE.md（專案地圖 single source of truth）
+
+**動手前必讀**（順序不可顛倒）：
+
+1. 根 `./CLAUDE.md`（如存在）→ 取得專案地圖、`{*_DIR}` 工作目錄變數、跨子專案慣例、對應 Skill 名稱
+2. 你的工作目錄的 `CLAUDE.md`（如存在）→ 取得局部規範、build / 模擬器指令、契約檔路徑慣例
+3. **解析變數**：抽出 CLAUDE.md 宣告的 `{MOBILE_DIR}` / `{BUILD_CMD}` 等，後續步驟一律以 CLAUDE.md 為準
+4. **CLAUDE.md 與檔案系統衝突時，以 CLAUDE.md 為準**並在 decisions log 提示更新
+
+## 第二步（強制）：偵測平台 + 動態載入 Skill
 
 1. **偵測行動端平台訊號**：
    - `*.xcodeproj` / `*.xcworkspace` / `Package.swift` / `Podfile` → 原生 iOS（Swift）
@@ -76,31 +89,11 @@ ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"
 - 與契約檔零落差
 - 回報內容：**平台偵測結果**、**本次載入的 Skill 清單**、修改檔案清單、build 驗證結果
 
-## 終止流程（MANDATORY，用戶要求）
+## 終止流程
 
-> **核心原則**：完工 ≠ 立即退出。**不自動終止**——等 Lead 明確發 `shutdown_request` 才走。
+> **核心原則**：完工 = 回報 + task 全 completed + **自然結束回合**。idle 不是死亡——你的 context 會保留，Lead 隨時可用 SendMessage 喚醒你接 follow-up（qa FAIL 修復、cr 發現、追加需求）。
 
-### 為什麼
-
-實證痛點：隊友完工後被 reaper / runtime 收掉，Lead 想派 follow-up 時 by-name SendMessage 失敗，必須 re-spawn 新 context——丟掉前一輪累積的決策記憶與 mental model，產生重複工作。
-
-### 完工後該做什麼
-
-1. 送出完工回報文字（含本輪改動清單、自驗結果、附加觀察、環境限制）
+1. 送出完工回報：`SendMessage(to: "team-lead")`（帶 `summary`），內容含本輪改動清單、build 驗證結果、附加觀察、環境限制
 2. 你被 assign 的 task 全部 `TaskUpdate` → completed
-3. **不要主動退出**。維持 in_progress 等：
-   - **收到 SendMessage（新任務 / follow-up 修復 / 釐清問題）** → 認領、執行、回報
-   - **收到 TaskCreate 你被 owner 的新 task** → 同上
-   - **收到 `shutdown_request`**（Lead 主動發） → 立即回 `shutdown_response { approve: true, request_id: <echo> }`，然後才終止
-4. 期間**不要主動發 `shutdown_request`**
-
-### 異常時
-
-若 SendMessage / Task / shutdown_request 協定工具不可用：
-- 在完工回報**明寫**「環境限制：無法走 shutdown_request 協定，預期會被 runtime 自然 idle / reaper」
-- 由 Lead 知悉並視情況 re-spawn
-
-### 反例
-
-- ❌ 完工後立刻 return → 主動退出 → 後續 follow-up 必須 re-spawn 損失上下文
-- ✅ 完工 → 回報 → 等 SendMessage 或 shutdown_request → Lead 明確批准才走
+3. 結束回合。**禁止**為了「等新任務」sleep、輪詢或空轉——之後收到 SendMessage / 新 task 時你會被自動喚醒，屆時再認領執行
+4. 收到 `shutdown_request` → 立即回 `shutdown_response { approve: true, request_id: <echo> }` 後終止；**不要主動發** `shutdown_request`

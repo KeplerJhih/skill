@@ -44,7 +44,7 @@
 
 ### API 契約
 - 後端先行：API 變更必須先合併後端 PR、產出契約文件，前端/iOS 才能依賴
-- 契約文件位置：`docs/api-contract.md`
+- 契約文件位置：`team/contracts/{feature}.api.md`（與 /team 慣例及 task 驗收 hook 的 `*contracts/*.api.md` 佈局一致）
 
 ### 部署
 - 各子專案有獨立 `Makefile`，`make help` 看可用指令
@@ -66,7 +66,7 @@ make e2e          # 端對端整合測試
 ## 📚 重要文件
 
 - `docs/architecture.md` — 整體架構與模組依賴關係
-- `docs/api-contract.md` — API 契約規範
+- `team/contracts/*.api.md` — API 契約（per-feature）
 - `docs/deployment.md` — 部署流程
 - 各子目錄的 `CLAUDE.md` — 子專案詳細規範
 

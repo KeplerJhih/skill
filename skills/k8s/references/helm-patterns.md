@@ -533,3 +533,43 @@ Values 檔案中的 image 欄位註解必須明確說明支援的格式，避免
 # image: 短名稱 (e.g. game-server-go) → 自動拼接 {global.image.registry}/{image}:{tag}
 #        完整路徑 (含 "/", e.g. gcr.io/other-project/svc) → 直接使用 {image}:{tag}
 ```
+
+### 6. Sprig `merge` 把 `false`/`0`/`""` 視為空值 — bool 開關的覆蓋不能用 merge 判斷
+
+用 `merge` 實作「全局 defaults + per-item 覆蓋」時，底層 mergo 把 dst 的 zero value
+（`false`、`0`、`""`）當「未設值」而回填 src 的值 — per-item `enabled: false` 會被
+全局 `enabled: true` 蓋掉，**opt-out 靜默失效**（反向 opt-in `true` 蓋 `false` 正常，
+所以很容易在只測過 opt-in 的情況下漏掉）。
+
+**錯誤寫法：** 用 merge 結果判斷 bool 開關：
+
+```gotemplate
+# ❌ per-item enabled: false 會被全局 true 回填，PDB/HPA 照樣渲染
+{{- $pdb := merge (deepCopy ($app.pdb | default dict)) ($.Values.defaults.pdb | default dict) }}
+{{- if $pdb.enabled }}
+```
+
+**正確寫法：** 可能為 zero value 的欄位用 `hasKey` 判斷 per-item 是否顯式設值，
+其餘數值欄位（minReplicas 等非零值）仍可走 merge 繼承：
+
+```gotemplate
+# ✅ hasKey 判斷顯式設值；ternary 語法 = (真值) (假值) (條件)
+{{- $pdbApp := $app.pdb | default dict }}
+{{- $pdbDef := $.Values.defaults.pdb | default dict }}
+{{- $pdb := merge (deepCopy $pdbApp) $pdbDef }}
+{{- $pdbEnabled := ternary $pdbApp.enabled $pdbDef.enabled (hasKey $pdbApp "enabled") }}
+{{- if $pdbEnabled }}
+```
+
+**連帶注意：** 同一個開關若還控制其他模板行為（如 `hpa.enabled` 時 Deployment 不渲染
+`replicas`），所有判斷點必須用同一套 `hasKey` 邏輯，否則會出現「HPA 照建 + replicas
+消失」的半套狀態。
+
+**驗證方式：** 分別實測 opt-out 與 opt-in 兩個方向，並確認修復不改變現行渲染：
+
+```bash
+# opt-out：資源應消失
+helm template rel chart/ -f values.yaml --set apps.x.pdb.enabled=false --show-only templates/pdb.yaml
+# 修復前後用現行 values diff，應 byte-level 相同（確保上線是 no-op）
+helm template rel chart/ -f values.yaml > /tmp/after.yaml && diff /tmp/before.yaml /tmp/after.yaml
+```

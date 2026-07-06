@@ -9,13 +9,17 @@
 # 規則（v1，溫和但有用）：
 # 1. subject 太短（< 6 字）→ 拒絕，要求補完
 # 2. description 為空 → 拒絕
-# 3. 永遠記錄到 audit log
+# 3. 永遠記錄到 audit log（~/.claude/logs/，不寫專案目錄）
+#
+# 2026-07-06 v2：audit log 改寫到 ~/.claude/logs/task-audit.log（行內帶專案路徑），
+# 移除在每個專案根 mkdir team/ 的副作用；並修正 debug 行在 $TS 定義前引用的 bug。
 
 set -eo pipefail
 
-LOG_DIR="${CLAUDE_PROJECT_DIR:-$PWD}/team"
+LOG_DIR="$HOME/.claude/logs"
 mkdir -p "$LOG_DIR"
-LOG="$LOG_DIR/audit.log"
+LOG="$LOG_DIR/task-audit.log"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 
 PAYLOAD="$(cat || true)"
 
@@ -72,13 +76,14 @@ except Exception:
     print('')
 " 2>/dev/null || echo "")"
 
+TS="$(date '+%Y-%m-%d %H:%M:%S')"
+
 # Debug: 若 subject 仍空，記錄完整 payload 以利診斷（截斷到 1KB）
 if [[ -z "$SUBJECT" ]]; then
-  echo "[$TS] TaskCreated DEBUG payload (subject not found): ${PAYLOAD:0:1024}" >> "$LOG"
+  echo "[$TS] [$PROJECT_DIR] TaskCreated DEBUG payload (subject not found): ${PAYLOAD:0:1024}" >> "$LOG"
 fi
 
-TS="$(date '+%Y-%m-%d %H:%M:%S')"
-echo "[$TS] TaskCreated: $SUBJECT" >> "$LOG"
+echo "[$TS] [$PROJECT_DIR] TaskCreated: $SUBJECT" >> "$LOG"
 
 if [[ ${#SUBJECT} -lt 6 ]]; then
   echo "Task subject 過短（< 6 字），請補完成更具描述性的標題（例如「實作購物車 add-to-cart API」而非「加 API」）。" >&2
