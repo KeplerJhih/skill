@@ -17,7 +17,7 @@ argument-hint: [需求描述]
 ### 強制執行順序（不可重排、不可省略）
 
 **第 0 步：載入 `karpathy-guidelines`**
-- 動作：`Skill(skill="karpathy-guidelines")`
+- 動作：載入名稱含 `karpathy-guidelines` 的 skill，**以當前 available skills 清單的實際名稱為準**（plugin 安裝時帶命名空間前綴，例如 `andrej-karpathy-skills:karpathy-guidelines`；短名呼叫可能匹配失敗）。
 - 無例外。即使你「以為自己已經知道」、「任務看起來很簡單」、「上一輪已經載過」——都必須再載一次，因為 skill 內容可能更新。
 
 **第 1 步：讀取共用工作流程基礎**
@@ -36,7 +36,7 @@ argument-hint: [需求描述]
 ### 違規偵測（自查）
 
 在你產出任何用戶可見文字之前，**自問**：
-- [ ] 我這一輪有沒有呼叫過 `Skill(skill="karpathy-guidelines")`？
+- [ ] 我這一輪有沒有載入過名稱含 `karpathy-guidelines` 的 skill？
 - [ ] 我有沒有 Read 過 `~/.claude/shared/workflow-base.md`？
 - [ ] 我有沒有依任務內容載入至少一個專屬 Skill（或確認屬情境 A 延後）？
 
