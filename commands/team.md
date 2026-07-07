@@ -61,7 +61,7 @@ teammate 顯示模式由 settings.json `teammateMode` 決定：
 
 1. `ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"` 載入協作工具 schema（schema 為準，文檔滯後照實際行為走）
 2. `Read("~/.claude/shared/workflow-base.md")` 取得共用流程規範（任務類型分流、專案偵測、上下文檢索、Skill 載入、向用戶詢問與問題回報、藍圖偏離處理、停損原則、驗證觸發條件）
-3. 載入名稱含 `karpathy-guidelines` 的 skill（**以當前 available skills 清單的實際名稱為準**，plugin 安裝時帶命名空間前綴，例如 `andrej-karpathy-skills:karpathy-guidelines`），再依任務內容匹配載入專屬 Skill（情境 A 可延後至取得需求後補做）
+3. 以 Skill 工具載入名稱含 `karpathy-guidelines` 的 skill（plugin 命名空間，如 `andrej-karpathy-skills:karpathy-guidelines`，以 available skills 清單實際名稱為準），再依任務內容匹配載入專屬 Skill（情境 A 可延後至取得需求後補做）
 
 ---
 
