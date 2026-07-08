@@ -100,6 +100,16 @@ return .interpolatingSpring(mass: 1, stiffness: 380, damping: 42,
 10. **跨層 drawer 內容要顯式觀察 theme / 語言並掛 `.id(theme+lang)`**：
     always-mounted overlay 的 @EnvironmentObject 變動 propagation 不可靠，
     換主題 / 語言後 drawer 卡舊樣式到重啟。
+11. **edge-open 攔截層會吃掉子樹 NavigationStack 的原生返回**：開啟手勢的 edge zone
+    （overlay + hitTest 攔截左緣帶）蓋在整個 root 上，push 頁的 interactive pop
+    （也是左緣手勢）在 sibling 子樹收不到 touch → 用戶右滑想返回卻開了選單。
+    不是手勢仲裁問題（`require(toFail:)` 無效——touch 根本到不了 pop recognizer），
+    是 hitTest 攔截。修法：push 頁 onAppear / onDisappear 上報全域 flag，host 以
+    canOpen gate 讓 edge zone hitTest 回 nil 透傳；sheet 呈現的頁天然免疫
+    （presented 層在攔截層之上）。onAppear/onDisappear 時序天然正確（interactive
+    pop 拖一半取消不 fire onDisappear、切 tab fire 後切回重 fire）。sim 驗證:idb
+    合成 swipe 觸發不了 UIScreenEdgePanGestureRecognizer 但觸發得了 interactive
+    pop（要慢滑）;判定 edge zone 是否攔截 = tap 左緣帶內可點元素,被吞即攔截中。
 
 ## 相關基建
 
