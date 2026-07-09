@@ -237,3 +237,13 @@ struct ExampleView: View {
     }
 }
 ```
+
+## 模擬器自動化（agent 驅動 E2E 時）
+
+用 `simctl` / idb 類工具驅動模擬器做 UI 驗證時的實戰坑（2026-07 累積）：
+
+1. **HID 打字會被 IME 攔截**：模擬器鍵盤語言含注音等 IME 時，`ui_type` 送的 ASCII 會被當注音鍵位（欄位出現「ㄅㄇ...」）。先設純英文鍵盤再測：
+   `xcrun simctl spawn <udid> defaults write .GlobalPreferences AppleKeyboards -array "en_US@sw=QWERTY;hw=Automatic"`，重啟 app 生效。
+2. **HID 打字會讓 iOS 認定「有實體鍵盤」**：軟體鍵盤隨後不再升起（焦點 caret 還在、鍵盤不見），且 `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false` + 重啟 Simulator 只在下次打字前有效。這是模擬器環境特性、非 app bug——驗「鍵盤黏附/收合」類行為要在打字前截圖，或改真機。
+3. **向 app 注入環境變數**：`SIMCTL_CHILD_` 前綴 + `simctl launch` 會把變數傳給 app 行程（如 `SIMCTL_CHILD_MY_API_BASE_URL=http://127.0.0.1:8080 xcrun simctl launch <udid> <bundle-id>`）。搭配 app 內 `ProcessInfo.processInfo.environment` 的 base URL 覆蓋點，可零改碼把 app 指向本機後端做 E2E；注意**只對該次 launch 有效**，使用者手動點 icon 重開就失效。
+4. **文字欄清空**：無 backspace 鍵可送——先 tap 聚焦、長按叫出編輯選單（選取/全選）、tap 全選後直接打字覆蓋。
