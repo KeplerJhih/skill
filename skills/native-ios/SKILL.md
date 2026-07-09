@@ -1,7 +1,7 @@
 ---
 name: native-ios
 version: 1.0.0
-description: Guide for building production-grade native iOS applications using SwiftUI and MVVM architecture. Use this skill when the user asks to build iOS features, Views, ViewModels, or native mobile code, or when working in the native/ios/ directory.
+description: Guide for building production-grade native iOS applications using SwiftUI and MVVM architecture. This skill should be used when the user asks to build iOS features, Views, ViewModels, or native mobile code, or when working in the native/ios/ directory.
 color: blue
 ---
 
@@ -226,8 +226,13 @@ struct ExampleView: View {
         .task {
             await viewModel.fetchData()
         }
-        .alert(item: $viewModel.errorMessage) { message in
-            Alert(title: Text("Error"), message: Text(message), dismissButton: .default(Text("OK")))
+        .alert("Error", isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "")
         }
     }
 }

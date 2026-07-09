@@ -166,8 +166,9 @@ make build-prod REPO={registry}/{project}/{service}:0.1.0
 ```
 是否需要建立 CI/CD 管線配置？
 
-1. Jenkins + AWS CodeBuild（Jenkinsfile + buildspec.yml）— 本專案標準方案
-2. 不需要
+1. Jenkins + AWS CodeBuild（Jenkinsfile + buildspec.yml）— 工具箱預設方案
+2. 其他平台（GitHub Actions / GitLab CI 等）— 依專案現有 CI 配置討論
+3. 不需要
 
 請選擇：
 ```
@@ -309,7 +310,7 @@ build-{sub-service}: ## 建置 {sub-service} Docker 映像（需指定 REPO）
 
 ## CI/CD 管線規格（Jenkins + AWS CodeBuild）
 
-本專案使用 **Jenkins（調度） + AWS CodeBuild（建置） + Discord Webhook（通知）** 作為標準 CI/CD 方案。
+工具箱預設 CI/CD 方案為 **Jenkins（調度） + AWS CodeBuild（建置） + Discord Webhook（通知）**；專案 CLAUDE.md 另有 CI 平台則從專案。
 
 ### 原則
 
@@ -435,15 +436,29 @@ CodeBuild 讀 buildspec 有三種來源，**寫死 vs 隨 repo 走** 各有 trad
 
 預設用第一種（明確、清晰）；若不希望「改路徑要兩邊同步」可考慮第二/三種。
 
+### 6. Discord embed 模板的 `stripIndent()` 被多行插值破功
+
+Groovy `"""...""".stripIndent()` 剝的是「**全部行的最小縮排**」。模板內插值若展開成多行
+（如 `${detailLines.join('\n')}`），第 2 行起是**頂格**插入 → 最小縮排 = 0 → 整段一格都不剝。
+
+**症狀**：一般文字 Discord 渲染會忽略行首空格、看不出異狀；但 ``` code block 內空格**原樣保留**
+—— 一鍵複製內容前面多 4 空格、Copy 按鈕連空格一起複製。單服務 repo（插值只有 1 行）正常，
+多服務 repo 一上多行就露餡 —— 同一份代碼、資料量不同結果不同，很難在單服務 repo 測出來。
+
+**修法**：code block 區段移到 `stripIndent()` **之後**頂格串接
+（`.stripIndent() + "\n📋 **一鍵複製**\n\`\`\`\n${copyText}\n\`\`\`"`），不寫進縮排模板內。
+範本見 `references/jenkinsfile-codebuild.md` 的 `updateDiscordWithFinalResults`。
+
 ---
 
 ## 參考資料
 
 如需詳細範本與配置，請查閱：
 
-- **`references/jenkinsfile-codebuild.md`** — Jenkinsfile + AWS CodeBuild buildspec.yml 範本（本專案標準 CI/CD 方案）
+- **`references/jenkinsfile-codebuild.md`** — Jenkinsfile + AWS CodeBuild buildspec.yml 範本（工具箱預設 CI/CD 方案）
 - **`references/makefile-cicd.md`** — 完整 Makefile 範本（含 Container Runtime 偵測、CI/CD 目標、auto-version、彩色輸出）
 - **`references/dockerfile-templates.md`** — 各語言的 dockerfile 範本（含註解）
 - **`references/compose-and-nginx.md`** — Docker Compose 與 Nginx 配置範本
 - **`references/dockerignore-gitignore.md`** — 各語言的 .dockerignore 與 .gitignore 範本
+- **`references/registry/`** — 各雲 Container Registry 對接（`aliyun-acr.md`、`gcp-artifact-registry.md`：認證、免密拉鏡像、命名慣例）
 - **`references/auto-version.md`** — 自動版本管理系統（Git hook + Python 腳本、前綴對照表、完整範本）

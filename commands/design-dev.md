@@ -28,11 +28,12 @@ argument-hint: [設計稿路徑或需求]
 | `mcp__pencil__batch_get` | 讀取設計元件、搜尋元素、檢視元件階層 |
 | `mcp__pencil__get_screenshot` | 渲染設計稿預覽截圖 |
 | `mcp__pencil__snapshot_layout` | 分析佈局結構、偵測定位問題與重疊元素 |
-| `mcp__pencil__get_editor_state` | 取得當前編輯器狀態與選取資訊 |
+| `mcp__pencil__get_editor_state` | 取得當前編輯器狀態與選取資訊（`include_schema: true` 取得當前 schema） |
 | `mcp__pencil__get_guidelines` | 取得設計規範（topic: code / table / tailwind / landing-page / slides / design-system / mobile-app / web-app） |
-| `mcp__pencil__get_style_guide_tags` / `get_style_guide` | 取得風格指南標籤與具體風格指南 |
-| `mcp__pencil__get_variables` / `set_variables` | 讀取 / 設定設計 Token（色彩、字型、間距） |
-| `mcp__pencil__search_all_unique_properties` | 搜尋節點樹中所有唯一屬性（驗證用） |
+| `mcp__pencil__get_variables` | 讀取設計 Token（色彩、字型、間距） |
+| `mcp__pencil__export_nodes` / `export_html` | 匯出節點 / HTML（代碼實作對照用） |
+
+> ⚠️ **Schema 為準**：Pencil MCP 工具隨版本演進（`set_variables`、`search_all_unique_properties`、`get_style_guide*` 等舊工具已移除）。使用前先 `get_editor_state(include_schema: true)` 取得當前 schema；本文件與實際 schema 不符時，一律以實際為準。
 
 ### Pencil MCP 技術限制（必讀）
 
@@ -49,9 +50,8 @@ argument-hint: [設計稿路徑或需求]
 
 #### Design Variables
 
-- 使用 `mcp__pencil__set_variables` 設定，命名帶 `$` 前綴
-- 在屬性中以 `"$variable-name"` 引用（如 `fill: "$slate-teal"`）
-- 搜尋文字顏色時，內部屬性名為 `textColor`（用於 `search_all_unique_properties`）
+- 先以 `mcp__pencil__get_variables` 檢視既有 Token；建立 / 修改 Token 的操作以當前 schema 為準（`batch_design` 支援時用之）
+- 命名帶 `$` 前綴，在屬性中以 `"$variable-name"` 引用（如 `fill: "$slate-teal"`）
 
 #### batch_design 最佳實踐
 
@@ -65,7 +65,7 @@ argument-hint: [設計稿路徑或需求]
 
 ## 📁 設計稿存放位置
 
-所有 Pencil 設計稿 (`.pen` 檔案) **統一存放**在專案根目錄的 `design/` 下：
+所有 Pencil 設計稿 (`.pen` 檔案) **統一存放**在專案根目錄的 `design/` 下（專案 CLAUDE.md 另有宣告則從專案）：
 
 ```text
 <project-root>/
@@ -127,7 +127,7 @@ argument-hint: [設計稿路徑或需求]
 2. **分析需求**：
    - 此介面解決什麼問題？目標用戶是誰？
    - 確定美學方向（基調）：極簡、奢華、工業、俏皮、編輯風…
-   - 技術限制：本專案使用 React 19 + Tailwind CSS 4 + Lucide React。
+   - 技術限制：依專案實際偵測（讀 package.json / 專案 CLAUDE.md；框架與版本一律以專案為準）。
    - 差異化：什麼讓這個設計令人難忘？
 
 3. **檢查現有設計**（若為改版）：
@@ -183,10 +183,10 @@ argument-hint: [設計稿路徑或需求]
    - 手機應用 → `topic: "mobile-app"`
    - 設計系統 → `topic: "design-system"`
 
-   若需要風格靈感，再用 `get_style_guide_tags` → `get_style_guide` 取得風格指南。
+   若需要風格靈感，改用 `get_guidelines` 的其他 topic 或參考既有 `.pen` 檔的風格。
 
 4. **設定設計 Token**：
-   使用 `mcp__pencil__set_variables` 設定配色、字型、間距等 Token。
+   先以 `mcp__pencil__get_variables` 檢視既有 Token；配色、字型、間距等 Token 的建立 / 修改依當前 schema 以 `batch_design` 操作。
 
 5. **建立設計元素**：
    使用 `mcp__pencil__batch_design` 逐步建立：
@@ -204,8 +204,8 @@ argument-hint: [設計稿路徑或需求]
 
 6. **文字可見性驗證**（MANDATORY）：
    每完成一個頁面後，立即執行：
-   - 使用 `mcp__pencil__search_all_unique_properties` 檢查該頁面的 `textColor` 屬性
-   - 若發現文字節點缺少 `textColor`，立即用 `batch_design` 的 `U()` 補上 `fill` 值
+   - 使用 `mcp__pencil__get_screenshot` 檢視該頁截圖，確認所有文字可見
+   - 對可疑節點用 `mcp__pencil__batch_get` 檢查其 `fill` 屬性，缺失立即用 `batch_design` 的 `U()` 補上
    - **不要等全部頁面做完才檢查**，逐頁驗證能及早發現問題
 
 7. **預覽驗證**：
@@ -240,7 +240,7 @@ argument-hint: [設計稿路徑或需求]
    使用 `Skill tool` 載入 `frontend`，遵循 React/TypeScript/Tailwind 實作規範。
 
 2. **依設計稿實作**：
-   - 在 `frontend/main/src/` 下建立或修改對應檔案。
+   - 在前端目錄（依專案 CLAUDE.md 的 `{FRONTEND_DIR}`，預設 `frontend/main`）的 `src/` 下建立或修改對應檔案。
    - 依照 `frontend` Skill 的目錄結構：
      - 頁面 → `pages/`
      - 原子元件 → `components/ui/`
@@ -249,10 +249,10 @@ argument-hint: [設計稿路徑或需求]
    - 確保 RWD 回應式設計（Mobile First → `md:` → `lg:` 斷點）。
 
 3. **TypeScript 檢查**：
-   執行 `cd frontend/main && npx tsc --noEmit` 確認無型別錯誤。
+   執行 `cd {FRONTEND_DIR} && npx tsc --noEmit` 確認無型別錯誤。
 
 4. **Lint 檢查**：
-   執行 `cd frontend/main && make lint` 確認無程式碼問題。
+   執行 `cd {FRONTEND_DIR} && make lint` 確認無程式碼問題。
 
 ---
 
@@ -295,6 +295,6 @@ argument-hint: [設計稿路徑或需求]
 3. **不要猜測設計**：對美學方向或佈局有疑問時，展示選項讓用戶選擇。
 4. **設計即文檔**：Pencil 設計稿即為前端視覺規格書，代碼實作必須忠實還原。
 5. **Pencil 技術限制必讀**：文字用 `fill`（非 `color`）、不用 icon 類型、不用百分比寬度。詳見本文件「Pencil MCP 技術限制」章節。
-6. **逐頁驗證文字**：每完成一個頁面，立即用 `search_all_unique_properties` 檢查 `textColor` 是否存在。發現缺失立即修復，**禁止延遲到所有頁面完成後才檢查**。
+6. **逐頁驗證文字**：每完成一個頁面，立即用 `get_screenshot` + `batch_get` 檢查文字可見性與 `fill` 屬性。發現缺失立即修復，**禁止延遲到所有頁面完成後才檢查**。
 
 ARGUMENTS: 使用 Pencil MCP 設計原型並結合 frontend-design Skill 美學指南，經設計方案確認與設計稿確認兩道審批後，實作為 React/Tailwind 代碼

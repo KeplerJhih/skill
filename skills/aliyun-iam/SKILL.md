@@ -44,8 +44,8 @@ version: 1.0.0
 `AliyunECSFullAccess` + `AliyunSLBFullAccess`。
 故意不給：`AliyunBSSFullAccess`（計費 / 釋放付費資源 — 留主帳號）。
 
-業務型子帳號（如 OSS 上傳）用自訂 Policy 鎖單一 bucket，範本見
-`devops/terraform/CLAUDE.md` 的 OSS RD bucket 段。
+業務型子帳號（如 OSS 上傳）用自訂 Policy 鎖單一 bucket（範本放各專案
+IaC 目錄的 CLAUDE.md，隨專案維護）。
 
 查當前授權：`aliyun ram ListUsers`、`aliyun ram ListPoliciesForUser --UserName <name>`。
 
@@ -96,7 +96,6 @@ KUBECONFIG=<asm> kubectl auth can-i create destinationrules.networking.istio.io 
   admin / ops / dev / restricted，或自訂 ClusterRole 綁定
 - 唯讀案例（給 RD 看 pod log）：cluster 級 readonly + 自訂 ClusterRole 補
   `pods/log` get 權限（`kubectl logs` 報 Forbidden 多半缺這個）
-- 本專案現役唯讀帳號：`rd-siou-ack`（見 `devops/terraform/CLAUDE.md` shared 層）
 
 ## 服務角色（SLR / ServiceRole）— 用到才授，主帳號操作
 

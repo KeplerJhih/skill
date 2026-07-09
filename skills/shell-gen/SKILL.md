@@ -1,6 +1,6 @@
 ---
 name: shell-gen
-description: 當使用者貼上 shell script 要求「重構」、「標準化」、「整理腳本」，或給專案名要求「產生部署腳本」、「寫 devops shell」、「建立自動化腳本」、「寫 devops_php.sh」、「寫 devops_main.sh」、「寫 devops_node.sh」、「產生 devops_xx.sh」時觸發此技能。
+description: 當使用者貼上 shell script 要求「重構」、「標準化」、「整理腳本」，或給專案名要求「產生部署腳本」、「寫 devops shell」、「建立自動化腳本」、「寫 devops_php.sh」、「寫 devops_main.sh」、「寫 devops_node.sh」、「產生 devops_xx.sh」，或 shell 腳本因中文/全形字元出現「unbound variable」、變數展開異常時觸發此技能。
 version: 1.0.0
 ---
 
@@ -164,6 +164,20 @@ main
 docker exec nginx nginx -s reload
 ```
 
+### 7. 變數展開安全（訊息含中文/全形字元時必看）
+
+`$var` **緊貼全形字元**時（全形括號、全形冒號、中文緊鄰），bash 會把全形字元的位元組吞進變數名（macOS bash 3.2，2026-07 實測）——`set -u` 下報 `unbound variable`（錯誤訊息帶亂碼，如 `rel�`）；沒有 `set -u` 則靜默展開成空字串，更難查。
+
+```bash
+# 錯誤 ❌ — $rel 緊貼全形括號，位元組被吞進變數名
+echo "強制覆蓋：$rel（原內容 diff 如下）"
+
+# 正確 ✅ — 緊貼非 ASCII 字元時一律加大括號
+echo "強制覆蓋：${rel}（原內容 diff 如下）"
+```
+
+**規則**：變數後緊跟非 ASCII 字元一律寫 `${var}`；後跟空格、ASCII 標點或行尾則不受影響。
+
 ---
 
 ## 重構規則
@@ -173,13 +187,14 @@ docker exec nginx nginx -s reload
 | 原始寫法 | 標準化寫法 |
 |----------|-----------|
 | 命令平鋪，無函式 | 拆分為 `git_pull`、`docker_build`、`update_code` 等函式 |
-| 硬編碼路徑 (`/data/htdocs/141/...`) | 提取為 `EXEC_DIR` 變數 |
-| 硬編碼 image (`141/php:dev`) | 提取為 `CONTAINER_IMAGE` + `XG_ENV` |
+| 硬編碼路徑 (`/data/htdocs/demo/...`) | 提取為 `EXEC_DIR` 變數 |
+| 硬編碼 image (`demo/php:dev`) | 提取為 `CONTAINER_IMAGE` + `XG_ENV` |
 | `docker build` 裸命令 | 改用 `make build-prod REPO=... DOCKERFILE_PATH=...` |
 | `cp -rf src/ dest/` 直接覆蓋 | 三步原子替換 |
 | 無入口函式 | 包裹在 `main()` 中 |
 | `echo "--- xxx ---"` 訊息不一致 | 統一格式 `echo "--- {動作描述} ---"` |
 | `BRANCH_NAME` 變數名 | 統一改為 `XG_ENV` |
+| `$var` 緊貼全形/中文字元（如 `$rel（`） | `${var}` 加大括號（見輸出規範 §7） |
 
 ---
 
@@ -193,7 +208,7 @@ docker exec nginx nginx -s reload
 
 | 資訊 | 預設值 | 說明 |
 |------|--------|------|
-| 專案名 | （必填） | 如 `141`、`california` |
+| 專案名 | （必填） | 如 `demo`、`shop` |
 | 服務類型 | 前端+後端 | `backend` / `frontend` / 兩者 |
 | 後端語言 | PHP | `php` / `go` |
 | 環境 | `dev` | `dev` / `uat` / `prod` |
@@ -227,9 +242,9 @@ set -e
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXEC_DIR=/data/dev/california/exec/php
+EXEC_DIR=/data/dev/demo/exec/php
 
-CONTAINER_IMAGE=california/php
+CONTAINER_IMAGE=demo/php
 XG_ENV=dev
 
 git_pull(){
@@ -281,7 +296,7 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-CONTAINER_IMAGE=california/web
+CONTAINER_IMAGE=demo/web
 XG_ENV=dev
 
 git_pull(){

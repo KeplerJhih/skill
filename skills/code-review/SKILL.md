@@ -78,7 +78,7 @@ color: red
 - [ ] **Service 層測試**：新增/修改的 Service 方法在 `*_service_test.go` 中有對應測試
 - [ ] **成功與失敗路徑**：每個方法至少覆蓋 Happy Path + 主要 Error Path（404 / 400）
 - [ ] **Mock 正確性**：Mock 放在 `internal/mocks/`，使用 `testify/mock`
-- [ ] **測試通過**：`cd backend/go && make test` 全部 PASS
+- [ ] **測試通過**：在後端目錄（依專案 CLAUDE.md，預設 `backend/go`）執行 `make test` 全部 PASS
 
 ---
 
@@ -151,14 +151,34 @@ color: red
 在完成代碼審查後，執行以下指令驗證：
 
 ```bash
-# 後端
-cd backend/go && make test        # 單元測試全部 PASS
-cd backend/go && go vet ./...     # 靜態分析無錯誤
+# 後端（目錄預設 backend/go，依專案 CLAUDE.md 可覆蓋）
+cd <後端目錄> && make test        # 單元測試全部 PASS
+cd <後端目錄> && go vet ./...     # 靜態分析無錯誤（Go 專案）
 
 # 前端（目錄預設 frontend/main，依專案 CLAUDE.md 可覆蓋）
 cd <前端目錄> && make lint        # ESLint 無錯誤
 cd <前端目錄> && make build       # TypeScript 編譯無錯誤
 ```
+
+---
+
+## 六、其他技術棧（依專案偵測補審）
+
+通用區段（一、四、五）對所有棧照審；後端非 Go / 前端非 React、或涉及行動端時，對照對應開發 skill 的規範與 DoD 補審：
+
+### 6.1 Python 後端（對照 `backend-python` skill）
+- [ ] DDD 分層：domain 零框架依賴、Service 只透過 Repository 介面操作、Handler 薄層
+- [ ] 異常體系：Service 拋 `AppError` 子類，由全局 errorhandler 統一格式化，不散落 try/except
+- [ ] Schema 分離：`api.model` 定義在 `schema/`，Handler import 使用
+- [ ] 測試：pytest 通過；新增 Service 方法有對應 `test_<service>.py` 案例
+- [ ] Migration 手動執行（`make migrate`），應用啟動時不自動 migrate
+
+### 6.2 iOS（對照 `native-ios` skill）
+- [ ] MVVM 職責：View 無業務邏輯 / API 呼叫；ViewModel 不 import SwiftUI、不持有 View 參考
+- [ ] 狀態管理：@StateObject / @ObservedObject 使用正確（View 創建的 ViewModel 用 StateObject）
+- [ ] API 對接：以契約檔為準，Codable 模型與 JSON 欄位對齊（snake_case ↔ CodingKeys）
+- [ ] 錯誤處理：async/await 有 catch，錯誤經 @Published 屬性呈現（alert / 提示）
+- [ ] 測試：ViewModel 有 XCTest（注入 Mock Service）；Xcode build 通過
 
 ---
 

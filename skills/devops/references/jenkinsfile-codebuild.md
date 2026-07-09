@@ -1,6 +1,6 @@
 # Jenkinsfile + AWS CodeBuild 範本
 
-本專案 CI/CD 架構：**Jenkins（調度） + AWS CodeBuild（建置） + Discord Webhook（通知）**。
+工具箱預設 CI/CD 架構：**Jenkins（調度） + AWS CodeBuild（建置） + Discord Webhook（通知）**。
 
 Tag-based 部署：打 `*-test`、`*-prod`、`*-hotfix` tag 觸發對應環境的 CodeBuild。
 
@@ -45,7 +45,7 @@ Git Push / Tag
 // ============================================================
 def prjName = "{project-name}"            // 專案名稱（Ansible 用）
 def targetName = "{project-testserver}"    // 測試服主機名
-def devtargetName = "{local-k8s-server}"   // 地端主機名
+def devtargetName = "{local-k8s-host}"     // 地端主機名
 
 // Discord 通知頻道（Jenkins 憑證變數）
 @groovy.transform.Field
@@ -62,12 +62,12 @@ def discordWebhookUrls = [
 @groovy.transform.Field
 def CODEBUILD_SERVICES = [
     // --- 單服務範例（前端）---
-    'main': 'gaming-{product}-frontend-{name}'
+    'main': '{org}-{product}-frontend-{name}'
 
     // --- 多服務範例（後端）---
-    // 'adminservice':      'gaming-rgs-backend-go-adminservice',
-    // 'gameservice':       'gaming-rgs-backend-go-gameservice',
-    // 'backendgateway':    'gaming-rgs-backend-go-backendgateway',
+    // 'adminservice':      '{org}-{product}-backend-go-adminservice',
+    // 'gameservice':       '{org}-{product}-backend-go-gameservice',
+    // 'backendgateway':    '{org}-{product}-backend-go-backendgateway',
 ]
 
 // 各環境共用同一組服務（如需覆寫可單獨設定）
@@ -81,7 +81,7 @@ def CODEBUILD_CONFIGS = [
 // 子群組額外通知（可帶 thread_id）
 @groovy.transform.Field
 def discordGroupWebhookUrls = [
-    // '${Team2Frontend}?thread_id=1232522440295321641',
+    // '${Team2Frontend}?thread_id={thread-id}',
 ]
 
 // ============================================================
@@ -90,6 +90,11 @@ def discordGroupWebhookUrls = [
 
 @groovy.transform.Field
 def discordMessageIds = [:]
+
+// 本次 run 啟動的 CodeBuild 追蹤表（buildType → [buildId, projectName, status...]）
+// 提為 @Field 讓 post{aborted} 能精準停掉「本次 run」啟動的 build（不誤傷併行 pipeline）
+@groovy.transform.Field
+def codeBuildTracker = [:]
 
 def currentDirectory
 @groovy.transform.Field
@@ -190,7 +195,7 @@ pipeline {
                             git push origin refs/tags/dev
                         """
                     }
-                    updateDiscordStatus("✅ dev tag 已更新至 ${env.GIT_COMMIT.take(7)}")
+                    updateDiscordStatus("✅ dev tag 已更新至 ${env.GIT_COMMIT.take(8)}")
                 }
             }
         }
@@ -247,6 +252,55 @@ pipeline {
         // uat 合併 → 自動打 *-uat tag（選用，結構同 *-test）
         // stage('Auto Tag for *-uat') { ... }
 
+        // master 進版 → 自動打 *-prod tag（immutable-test-tag「已測證明」模式）
+        //
+        // 安全閘：只有「恰好是測過的 commit」（HEAD 或 HEAD^2 帶 *-test-<hash> immutable tag）
+        // 才自動發版；未經 beta 測試流程的 commit 進 master 只 Discord 警示、不產 prod image。
+        //
+        // ⚠️ 生效需兩輪：master build 讀的是 master 上的 Jenkinsfile —— 本 stage 首次
+        // 隨 beta→master 進版時，該輪跑的仍是舊檔，不會自動打 prod tag；下一輪才生效。
+        stage('Auto Tag for *-prod') {
+            when { branch 'master' }
+            steps {
+                script {
+                    // master 進版兩種形態都支援：fast-forward（查 HEAD 本身）與 merge commit（查 HEAD^2 = 被合入的 beta head）
+                    def version = null
+                    def testedProof = null
+
+                    withCredentials([usernamePassword(credentialsId: '<jenkins-gitlab-credential-id>', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                        sh """
+                            git config --global credential.helper store
+                            echo "https://\${GIT_USERNAME}:\${GIT_PASSWORD}@<gitlab-host>" > ~/.git-credentials
+                        """
+
+                        for (ref in ['HEAD', 'HEAD^2']) {
+                            def short8 = sh(script: "git rev-parse --short=8 --verify --quiet ${ref} || true", returnStdout: true).trim()
+                            if (!short8) continue
+
+                            def tagLine = sh(script: "git ls-remote --tags origin 'refs/tags/*-test-${short8}' | head -1", returnStdout: true).trim()
+                            if (tagLine) {
+                                def testTag = tagLine.split('refs/tags/')[1].trim()
+                                version = testTag.replaceAll("-test-${short8}\$", '')
+                                testedProof = "${testTag} (${ref})"
+                                break
+                            }
+                        }
+                    }
+
+                    if (version) {
+                        echo "偵測到已測試版本進 master: ${testedProof}，版本號: ${version}"
+                        updateDiscordStatus("⏳ 正在創建 Tag: ${version}-prod ...")
+                        createAndPushTag(version, 'prod')
+                        def immutableTag = createImmutableTag(version, 'prod')
+                        updateDiscordStatus("✅ 已創建 Tag: ${version}-prod\n🏷️ Image Tag: ${immutableTag}")
+                    } else {
+                        echo "master HEAD / HEAD^2 均無 immutable *-test tag（未經 beta 測試流程），跳過自動 prod tag"
+                        updateDiscordStatus("⚠️ 本次進版找不到已測試證明（*-test-<hash> tag），跳過自動 prod tag；請先走 beta 流程或手動打 *-prod")
+                    }
+                }
+            }
+        }
+
         // Tag 觸發 CodeBuild
         stage('AWS CodeBuild for tag') {
             when {
@@ -285,6 +339,9 @@ pipeline {
     post {
         success { script { updateDiscordFinal(3447003, "🟢 構建成功") } }
         failure { script { updateDiscordFinal(15158332, "🔴 構建失敗"); sendAiAnalyzer(["alerts1", "alerts2"]) } }
+        // aborted 精準停止：只停「本次 run」啟動的 buildId（codeBuildTracker @Field）。
+        // ❌ 不要掃全 project 的 in-progress build —— 會誤傷併行 pipeline 正在跑的 build。
+        // 不先查狀態：stop-build 對 QUEUED / IN_PROGRESS 都有效，對已 terminal 的會報錯 → || true 吞掉。
         aborted {
             script {
                 withCredentials([[
@@ -293,8 +350,15 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    def projectNames = CODEBUILD_CONFIGS.collectMany { type, configs -> configs.values() }.unique()
-                    for (projectName in projectNames) { stopCodeBuildProject(projectName) }
+                    def tracked = codeBuildTracker.findAll { bt, info -> info.buildId }
+                    if (tracked.isEmpty()) {
+                        echo "本次 run 無已啟動的 CodeBuild（可能在觸發前就中止），略過"
+                    } else {
+                        tracked.each { bt, info ->
+                            echo "停止 ${info.projectName} 的 build：${info.buildId}"
+                            sh "aws codebuild stop-build --id ${info.buildId} --region ${AWS_REGION} || true"
+                        }
+                    }
                 }
                 updateDiscordFinal(16744256, "🛑 構建已中止")
             }
@@ -374,7 +438,9 @@ def updateDiscordCodeBuildProgress(webhookUrls, buildTracker, tagName, attempt, 
 def updateDiscordWithFinalResults(webhookUrls, results, tagName) {
     def detailLines = []
     def failureCount = 0
-    def shortHash = env.GIT_COMMIT?.take(7) ?: 'unknown'
+    // 取 8 碼，與 createImmutableTag / buildspec 的 git rev-parse --short=8 對齊
+    // （長度不一致 → Discord 顯示的 tag 與 registry 實際 push 的 tag 不同 → 照貼進 Helm 會 ImagePullBackOff）
+    def shortHash = env.GIT_COMMIT?.take(8) ?: 'unknown'
     def imageTag = "${tagName}-${shortHash}"
 
     results.each { buildType, result ->
@@ -399,7 +465,19 @@ def updateDiscordWithFinalResults(webhookUrls, results, tagName) {
     def resultEmoji = overallSuccess ? "🎉" : "⚠️"
     def resultText = overallSuccess ? "所有構建完成" : "${failureCount} 個構建失敗"
 
+    // 一鍵複製內容（貼進 Helm values / 部署配置用，無空格）：
+    // 單 project（前端 repo）給「project:tag」；多 project（backend 全服務共用同一 image tag）
+    // 給「repo:tag」——repo 名與訊息標題同源（prjName + JOB_NAME 第一段 = multibranch folder 名）
+    def copyText = (results.size() == 1)
+        ? results.collect { bt, r -> "${r.projectName}:${imageTag}" }.join('\n')
+        : "${prjName}-${env.JOB_NAME.tokenize('/')[0]}:${imageTag}"
+
     def triggerInfo = getTriggerInfo()
+    // ⚠️ stripIndent 踩雷：它剝的是「全部行的最小縮排」。多行插值（如 ${detailLines.join('\n')}）
+    // 第 2 行起是頂格插入 → 最小縮排 = 0 → 整段一格都不剝。一般文字 Discord 會忽略行首空格
+    // 看不出異狀，但 ``` code block 內空格會原樣保留、Copy 按鈕連空格一起複製。
+    // → 一鍵複製 code block 必須放在 stripIndent() 之後頂格串接，不可寫進縮排模板內。
+    //   （單服務 repo 插值只有 1 行不會踩到；多服務 repo 一上多行就露餡）
     def description = """
     **📦 ${env.JOB_NAME}**
     ${triggerInfo}
@@ -414,9 +492,10 @@ def updateDiscordWithFinalResults(webhookUrls, results, tagName) {
     ${resultEmoji} **${resultText}**
 
     🏷️ **Pushed Tags**
+    　• `latest`
     　• `${tagName}`
     　• `${imageTag}`
-    """.stripIndent()
+    """.stripIndent() + "\n📋 **一鍵複製**\n```\n${copyText}\n```"
     lastDiscordDescription = description
 
     for(url in webhookUrls) {
@@ -462,7 +541,9 @@ def updateDiscordFinal(color, statusText) {
 // ----------------------------------------------------------------------
 
 def createImmutableTag(version, env) {
-    def shortHash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+    // 固定 8 碼 —— 與 buildspec 的 IMAGE_TAG hash、Discord 最終回報的 take(8) 三處對齊
+    // （git 預設 short 長度隨 repo 物件數浮動，不固定會造成 tag 長度漂移）
+    def shortHash = sh(script: 'git rev-parse --short=8 HEAD', returnStdout: true).trim()
     def immutableTag = "${version}-${env}-${shortHash}"
     withCredentials([usernamePassword(credentialsId: '<jenkins-gitlab-credential-id>', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
         sh """
@@ -554,7 +635,8 @@ def queryBuildLogs(buildId) {
 }
 
 def executeCodeBuildsInParallel(configs, tagName, webhookUrls) {
-    def buildTracker = [:]
+    codeBuildTracker.clear()
+    def buildTracker = codeBuildTracker   // 指向 @Field 共享表，post{aborted} 可讀
     configs.each { buildType, projectName ->
         def buildId = startCodeBuild(projectName, tagName, buildType)
         buildTracker[buildType] = [buildId: buildId, projectName: projectName, status: buildId ? 'IN_PROGRESS' : 'START_FAILED', logs: null, success: false]
@@ -581,22 +663,6 @@ def executeCodeBuildsInParallel(configs, tagName, webhookUrls) {
         results[buildType] = info
     }
     return results
-}
-
-def stopCodeBuildProject(projectName) {
-    try {
-        def buildsInProgress = sh(script: "aws codebuild list-builds-for-project --project-name ${projectName} --region ${AWS_REGION} --query 'ids' --output text", returnStdout: true).trim()
-        if (buildsInProgress && buildsInProgress != 'None') {
-            for (buildId in buildsInProgress.split(/\s+/)) {
-                def status = queryBuildStatus(buildId)
-                if (status == 'IN_PROGRESS') {
-                    sh "aws codebuild stop-build --id ${buildId} --region ${AWS_REGION}"
-                }
-            }
-        }
-    } catch (Exception e) {
-        echo "停止 ${projectName} 構建時出錯: ${e.message}"
-    }
 }
 
 def sendAiAnalyzer(channelList = null) {
@@ -662,8 +728,9 @@ phases:
         fi
 
       # 共通：產生 IMAGE_TAG = TAG_NAME + commit short hash
+      # 固定 8 碼 — 與 Jenkinsfile createImmutableTag / Discord 回報三處對齊（預設 short 長度會浮動）
       - |
-        COMMIT_HASH=$(git rev-parse --short HEAD)
+        COMMIT_HASH=$(git rev-parse --short=8 HEAD)
         export IMAGE_TAG="${TAG_NAME}-${COMMIT_HASH}"
         echo "IMAGE_TAG: $IMAGE_TAG"
 
@@ -688,7 +755,7 @@ CodeBuild 推送 3 個 tag：
 |-----|------|------|
 | `latest` | 永遠指向最新建置 | `latest` |
 | `TAG_NAME` | 對應 Git tag | `1.0.0-test` |
-| `IMAGE_TAG` | TAG_NAME + commit hash（唯一不可變） | `1.0.0-test-a1b2c3d` |
+| `IMAGE_TAG` | TAG_NAME + commit hash（唯一不可變） | `1.0.0-test-a1b2c3d4` |
 
 ### Registry 具體實作
 
@@ -754,7 +821,7 @@ phases:
 | `{version}-test` | CodeBuild → 測試環境 | `1.0.0-test` |
 | `{version}-prod` | CodeBuild → 正式環境 | `1.0.0-prod` |
 | `{version}-hotfix` | CodeBuild → 正式環境（熱修復） | `1.0.0-hotfix` |
-| `{version}-{env}-{hash}` | Immutable tag（自動產生，跳過 pipeline） | `1.0.0-test-a1b2c3d` |
+| `{version}-{env}-{hash}` | Immutable tag（自動產生，跳過 pipeline） | `1.0.0-test-a1b2c3d4` |
 
 ## Image Tag 規則
 
@@ -764,4 +831,4 @@ CodeBuild 推送 3 個 tag 到目標 Image Registry：
 |-----|------|------|
 | `latest` | 永遠指向最新建置 | `latest` |
 | `TAG_NAME` | 對應 Git tag | `1.0.0-test` |
-| `IMAGE_TAG` | TAG_NAME + commit hash（唯一且不可變） | `1.0.0-test-a1b2c3d` |
+| `IMAGE_TAG` | TAG_NAME + commit hash（唯一且不可變） | `1.0.0-test-a1b2c3d4` |

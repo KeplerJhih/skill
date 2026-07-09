@@ -225,8 +225,8 @@ resource "alicloud_cr_vpc_endpoint_linked_vpc" "main" {
 
 ```bash
 terraform import module.acr.alicloud_cr_ee_instance.main cri-xxxxxxxx
-terraform import 'module.acr.alicloud_cr_ee_namespace.main["aquawin"]' 'cri-xxxxxxxx:aquawin'
-terraform import 'module.acr.alicloud_cr_ee_repo.main["client-pc"]' 'cri-xxxxxxxx:aquawin:client-pc'
+terraform import 'module.acr.alicloud_cr_ee_namespace.main["myns"]' 'cri-xxxxxxxx:myns'
+terraform import 'module.acr.alicloud_cr_ee_repo.main["myrepo"]' 'cri-xxxxxxxx:myns:myrepo'
 ```
 
 import 前需暫時清空所有 for_each 依賴 module.vpc 輸出的 block（如 linked_vpc），不然 TF 會抱怨 unknown for_each keys。

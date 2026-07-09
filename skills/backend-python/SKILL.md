@@ -1,7 +1,7 @@
 ---
 name: backend-python
 version: 1.0.0
-description: Guide for building production-grade, DDD-compliant Python backend services. Use this skill when the user asks to build backend features, API endpoints, database models, or infrastructure code in Python with Flask.
+description: Guide for building production-grade, DDD-compliant Python backend services. This skill should be used when the user asks to build backend features, API endpoints, database models, or infrastructure code in Python with Flask.
 color: green
 ---
 
@@ -37,8 +37,10 @@ color: green
 
 嚴格遵守此目錄結構。不要混合不同層級。
 
+> **後端根目錄 `{BACKEND_DIR}`**：預設慣例為 `backend/python`；若專案 CLAUDE.md 另有宣告 `{BACKEND_DIR}`，以專案宣告為準。下文指令中的 `{BACKEND_DIR}` 皆同此解析。
+
 ```text
-backend/python/                       # ← 後端根目錄 (所有指令都在此執行)
+{BACKEND_DIR}/                        # ← 後端根目錄 (所有指令都在此執行)
 ├── app/                              # 應用程式主包
 │   ├── __init__.py                   # Flask App Factory (create_app)
 │   ├── extensions.py                 # 擴展初始化 (db, migrate, jwt, cors)
@@ -92,12 +94,12 @@ backend/python/                       # ← 後端根目錄 (所有指令都在�
     -   Schema 定義在 `schema/` 目錄，Handler import 使用。
     -   使用 `pkg/response` 統一回應格式。
 5.  **文檔 (Documentation)**：為 Handler 添加 Flask-RESTX 裝飾器。
-    -   **完整規範請讀取 [SWAGGER.md](SWAGGER.md)**。
+    -   **完整規範請讀取 [SWAGGER.md](references/SWAGGER.md)**。
 6.  **測試 (Testing)**：Service 層每次變更後**必須**執行測試。
-    -   執行指令：`cd backend/python && make test`
+    -   執行指令：`cd {BACKEND_DIR} && make test`
     -   新增 Service 方法時，同步補充 `test_<service>.py`。
 
-> 📖 **每一層的完整代碼範例**：請讀取 **[EXAMPLES.md](EXAMPLES.md)**
+> 📖 **每一層的完整代碼範例**：請讀取 **[EXAMPLES.md](references/EXAMPLES.md)**
 
 ## 資料庫管理 (Database Lifecycle)
 
@@ -105,7 +107,7 @@ backend/python/                       # ← 後端根目錄 (所有指令都在�
 - DB 未就緒時應用仍可啟動，API 回傳 503 提示，CLI 輸出友善錯誤，Scheduler 自動跳過。
 - 開發流程：首次 `make init-db`，日常 `make migrate`，重置 `make reset-db`。
 
-> 📖 **完整規範與防坑指南**：請讀取 **[DB.md](DB.md)**
+> 📖 **完整規範與防坑指南**：請讀取 **[DB.md](references/DB.md)**
 
 ## 編碼規則 (Coding Rules)
 
@@ -147,4 +149,4 @@ backend/python/                       # ← 後端根目錄 (所有指令都在�
 - 在 `router.py` 中手動組裝 Repository → Service → Handler 依賴鏈。
 - 禁止 Service 內部直接 import 並實例化 Repository 實作。
 
-> 📖 **每條規則的完整代碼範例**：請讀取 **[EXAMPLES.md](EXAMPLES.md)**
+> 📖 **每條規則的完整代碼範例**：請讀取 **[EXAMPLES.md](references/EXAMPLES.md)**

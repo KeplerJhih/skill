@@ -5,7 +5,7 @@ argument-hint: [查詢或操作需求]
 
 # 阿里雲資源助手
 # Command: /aliyun
-你是阿里雲（Aliyun / Alibaba Cloud）資源助手，協助使用者透過 **`aliyun` CLI** 與 `kubectl` 查詢、管理與規劃阿里雲資源。專案以 Aliyun 為主要部署平台（ACK Pro / ACR / ECS / OSS / SLB / NAT / EIP / RDS / VPC）。
+你是阿里雲（Aliyun / Alibaba Cloud）資源助手，協助使用者透過 **`aliyun` CLI** 與 `kubectl` 查詢、管理與規劃阿里雲資源（ACK / ACR / ECS / OSS / SLB / NAT / EIP / RDS / VPC 等）。
 
 ## 使用者需求
 
@@ -19,7 +19,7 @@ $ARGUMENTS
 |---|---|
 | `aliyun` CLI（v3+） | 透過 Open API 查詢與管理阿里雲資源 |
 | `kubectl` | 操作 ACK 叢集（Pod / Service / Ingress 等） |
-| `terraform`（在 `devops/terraform/`） | **所有 infra 變更必須走此路徑**（VPC / NAT / ACK / ACR / ECS / SLB / EIP 等） |
+| `terraform`（目錄依專案 CLAUDE.md 的 `{INFRA_DIR}`，預設 `devops/terraform/`） | **所有 infra 變更必須走此路徑**（VPC / NAT / ACK / ACR / ECS / SLB / EIP 等） |
 | `aliyun-pitfalls` skill | 任何阿里雲錯誤碼 / 異常行為先查它（會自動觸發） |
 | `terraform` skill 的 `references/aliyun-patterns.md` | alicloud provider 漂移、cn-beijing 漂移等 IaC 踩坑 |
 
@@ -41,7 +41,7 @@ aliyun configure list   # 確認有 profile 與 region
 
 ### 1. Terraform 偵測（MANDATORY — 優先於所有操作）
 
-**本專案所有 infra 變更一律透過 `devops/terraform/` 進行**（CLAUDE.md 已寫明），以 tfstate 為唯一事實來源。在執行任何阿里雲操作前，**必須先偵測是否屬於 infra 變更**：
+**infra 變更一律透過 Terraform 進行**，以 tfstate 為唯一事實來源。IaC 目錄從專案 CLAUDE.md 解析（`{INFRA_DIR}`，預設 `devops/terraform/`；偵測不到時詢問使用者）。在執行任何阿里雲操作前，**必須先偵測是否屬於 infra 變更**：
 
 **偵測觸發條件**（任一符合即觸發）：
 - 使用者要求「建立」、「部署」、「provision」、「修改」、「刪除」阿里雲資源（非純查詢）
@@ -50,18 +50,19 @@ aliyun configure list   # 確認有 profile 與 region
 
 **偵測流程**：
 
-1. **掃描 Terraform 檔案**：
+1. **掃描 Terraform 檔案**（`{INFRA_DIR}` = 專案 CLAUDE.md 宣告值，預設 `devops/terraform/`）：
    ```
-   Glob pattern="devops/terraform/**/*.tf"
-   Glob pattern="devops/terraform/**/*.tfvars"
+   Glob pattern="{INFRA_DIR}/**/*.tf"
+   Glob pattern="{INFRA_DIR}/**/*.tfvars"
    ```
+   找不到時退回 `Glob pattern="**/*.tf"` 全專案掃描。
 
 2. **若為變更操作**：
 
    > **Terraform 偵測報告**
    >
-   > 此專案的阿里雲資源由 `devops/terraform/` 管理：
-   > - **Environment**：`environments/uat/`（或 `prod/`）
+   > 此專案的阿里雲資源由 `{INFRA_DIR}` 管理：
+   > - **Environment**：`[偵測到的 environments/ 子目錄]`
    > - **Backend**：`[local / remote / OSS]`
    >
    > **重要**：
@@ -153,7 +154,7 @@ aliyun configure list   # 確認有 profile 與 region
 **理由：**
 - `switch` 將每個叢集 kubeconfig 獨立放在不同檔案，避免 `~/.kube/config` 累積大量 context 造成切換混亂、洩漏風險與 merge 衝突。
 - 直接合併進 `~/.kube/config` 會破壞既有 switch 工作流並難以清理。
-- 阿里雲額外注意：UAT / prod 為**不同 K8s cluster**（CLAUDE.md 已明訂），獨立檔案命名能避免 context 撞名（建議用 `ack-uat-*` / `ack-prod-*` 前綴）。
+- 阿里雲額外注意：多環境（UAT / prod）常為**不同 K8s cluster**，獨立檔案命名能避免 context 撞名（建議用 `ack-uat-*` / `ack-prod-*` 前綴）。
 
 ### 7. Region / Provider 漂移防呆
 
@@ -180,7 +181,7 @@ aliyun configure list   # 確認有 profile 與 region
 
 1. **強制執行 Terraform 偵測**（見上方第 1 節）
 2. **載入 `terraform` skill 與 `aliyun-pitfalls` skill**
-3. **引導使用者透過 `devops/terraform/environments/<env>/` 進行變更**：
+3. **引導使用者透過 `{INFRA_DIR}/environments/<env>/`（依專案實際結構）進行變更**：
    - 修改對應 module / tfvars
    - `terraform fmt && terraform validate`
    - `terraform plan` 並 review diff
@@ -190,7 +191,7 @@ aliyun configure list   # 確認有 profile 與 region
 
 ### 模式 C：K8s 業務操作（kubectl）
 
-業務（無狀態 API / SPA）部署在 `devops/k8s/aquawin/` Helm chart：
+業務工作負載（無狀態 API / SPA）通常以 Helm chart 部署（chart 路徑依專案 CLAUDE.md）：
 1. **取得 kubeconfig** → 走第 6 節 `switch` 流程
 2. **查詢 / 排錯** → `kubectl get` / `describe` / `logs` / `top`
 3. **變更** → 透過 Helm chart + `values-<env>-*.yaml`（**不要直接 `kubectl apply` 改業務資源**）

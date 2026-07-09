@@ -7,7 +7,7 @@ argument-hint: [base_branch]
 
 一鍵自動偵測當前 branch 的變更，產生 PR Title/Description，並透過 `gh` CLI 建立 PR。
 
-**引數**：`$ARGUMENTS`（可選，格式：`[base_branch]`，預設為 `master`）
+**引數**：`$ARGUMENTS`（可選，格式：`[base_branch]`，未指定時自動偵測 repo 預設分支）
 
 ---
 
@@ -34,8 +34,11 @@ gh auth status
 # 取得當前 branch
 CURRENT_BRANCH=$(git branch --show-current)
 
-# base branch：使用者指定 or 預設 master
-BASE_BRANCH="${ARGUMENTS:-master}"
+# base branch：使用者指定 or 自動偵測 repo 預設分支
+BASE_BRANCH="$ARGUMENTS"
+[ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's|^origin/||')
+[ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null)
+[ -z "$BASE_BRANCH" ] && BASE_BRANCH=master   # 都偵測不到才退回，並向使用者確認
 
 # 檢查是否有未提交變更
 git status --short
@@ -100,13 +103,7 @@ git diff $BASE_BRANCH..HEAD
 # 推送到遠端（若尚未推送）
 git push -u origin $CURRENT_BRANCH
 
-# 建立 PR
-gh pr create --base $BASE_BRANCH --title "$TITLE" --body "$DESCRIPTION"
-```
-
-使用 HEREDOC 傳遞 body 以確保格式正確：
-
-```bash
+# 建立 PR（HEREDOC 傳遞 body 確保格式正確）
 gh pr create --base $BASE_BRANCH --title "$TITLE" --body "$(cat <<'EOF'
 $DESCRIPTION
 EOF

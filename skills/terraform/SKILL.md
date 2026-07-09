@@ -102,7 +102,7 @@ If Terraform MCP is not detected, provide these setup options:
 1. **偵測 provider**（依序，取到即停）：
    - `grep -rhE 'source\s*=' **/versions.tf providers.tf` 看 `required_providers` 的 source
    - 已 init 的話 `terraform providers`
-   - 退而求其次看 tfvars 的 region 命名：`cn-*` / `ap-northeast-1` 等 → alicloud；`us-east-1` 等 → aws；`*-central1` / `asia-*` → gcp
+   - 退而求其次看 tfvars 的 region 命名：`cn-*` → alicloud（注意 `ap-*` 在 AWS 與阿里雲國際區皆存在，不可單靠它判定）；`us-east-1` 等 → aws；`*-central1` / `asia-*` → gcp
 
 2. **依偵測結果載入對應 skill**（用 `Skill` 工具，可多個）：
 
@@ -257,7 +257,7 @@ output "vpc_id" {
 Run validation before planning:
 
 ```bash
-cd infra/environments/{env}
+cd env/{env}    # 依 Step 2 結構；專案採 environments/ 命名則對應調整
 
 # Format check
 terraform fmt -check -recursive
@@ -477,13 +477,7 @@ BytePlus uses a community/custom Terraform provider. When working with BytePlus:
 
 #### 值該放 tfvars 還是 main.tf？
 
-HashiCorp 官方的判斷標準（[來源](https://developer.hashicorp.com/terraform/tutorials/configuration-language/variables)）：
-
-> *"In any configuration, there may be some values that you want to let users configure with variables and others you wish to hard-code."*
->
-> *"When writing Terraform configuration for a specific project, you may choose to hard-code attributes if you do not want to let users configure them."*
-
-**核心問題：「這個值會因環境而變嗎？」**
+**核心問題：「這個值會因環境而變嗎？」**（HashiCorp 官方判準與來源連結見 `references/module-conventions.md` § "Variable Value Placement Guide"）
 
 | 類別 | 放哪裡 | 範例 |
 |------|--------|------|
@@ -492,17 +486,7 @@ HashiCorp 官方的判斷標準（[來源](https://developer.hashicorp.com/terra
 | 架構決策、固定命名 | **main.tf 硬編碼可接受** | VPC 名稱、固定 tag、port 號 |
 | 衍生/計算值 | **locals** | name prefix、subnet ID 解析 |
 
-> **Directory-per-environment 情境**：若採用 `environments/{env}/` 結構，每個環境有獨立的 `main.tf` 和 `terraform.tfvars`。此時值放 main.tf 或 tfvars 的差異縮小，因為切環境時兩個檔案都是各自獨立的。但建議團隊內統一慣例（如「規格類一律放 tfvars」），讓新人容易找到值在哪裡。
-
-#### tfvars 在 directory-per-env 下的額外價值
-
-即使每個環境有獨立的 main.tf，tfvars 在以下場景仍有獨特作用：
-
-| 場景 | 說明 |
-|------|------|
-| 同環境多組配置切換 | `terraform apply -var-file=loadtest.tfvars` vs 正常配置 |
-| 敏感值不進 git | tfvars 加入 `.gitignore`，main.tf 留在版控 |
-| CI/CD 動態注入 | 用 `TF_VAR_*` 環境變數或 `-var-file` 注入 |
+> Directory-per-environment 取捨與 tfvars 額外價值場景 → `references/module-conventions.md` § "Variable Value Placement Guide"。
 
 #### 原則
 
@@ -513,41 +497,7 @@ HashiCorp 官方的判斷標準（[來源](https://developer.hashicorp.com/terra
 
 ### `for_each` + `map(object)` 多資源模式
 
-當一個 module 需要管理**多個同類但不同規格的資源**（例如多台 EC2、多個 bucket），使用 `for_each` + `map(object)` 而非重複呼叫 module：
-
-```hcl
-# variables.tf — 用 map(object) 定義，optional() 提供合理預設值
-variable "instances" {
-  type = map(object({
-    instance_type      = string
-    instance_name      = string
-    subnet_id          = string
-    root_volume_size   = optional(number, 30)
-    associate_eip      = optional(bool, true)
-    security_group_ids = list(string)          # 由外部 SG module 提供
-  }))
-}
-
-# main.tf — compute 只管 EC2，SG 由獨立 module 管理
-resource "aws_instance" "main" {
-  for_each               = var.instances
-  instance_type          = each.value.instance_type
-  subnet_id              = each.value.subnet_id
-  vpc_security_group_ids = each.value.security_group_ids  # per-instance SG
-  ...
-}
-
-resource "aws_eip" "main" {
-  for_each = { for k, v in var.instances : k => v if v.associate_eip }
-  instance = aws_instance.main[each.key].id
-  ...
-}
-
-# outputs.tf — 輸出 map，key 對應邏輯名稱
-output "instance_ids" {
-  value = { for k, v in aws_instance.main : k => v.id }
-}
-```
+當一個 module 需要管理**多個同類但不同規格的資源**（例如多台 EC2、多個 bucket），使用 `for_each` + `map(object)` 而非重複呼叫 module（完整 HCL 三件套範例見 `references/module-conventions.md` § "for_each Module Design"）。
 
 **設計原則**：
 - **SG 獨立 module**：Security Group **必須**拆成獨立 module（`modules/security-groups/`），不可放在 compute 內。不同角色的 VM 需要不同 SG 組合，綁死在 compute 會導致無法靈活配置

@@ -13,19 +13,41 @@ $ARGUMENTS
 
 ## 執行原則
 
-### 1. 安全分級
+**⚠️ 核心原則：所有建立與刪除操作，一律必須經過使用者明確確認後才可執行。絕無例外。**
+
+### 1. Terraform 偵測（優先於變更操作）
+
+專案以 Terraform 管理 GCP 資源時，**變更操作必須走 Terraform**，避免 state drift：
+
+1. 使用者要求「建立 / 修改 / 刪除」GCP 資源（非純查詢）時，先掃描 IaC 目錄（專案 CLAUDE.md 的 `{INFRA_DIR}`，預設 `devops/terraform/`；找不到退回 `Glob pattern="**/*.tf"`）
+2. 偵測到 Terraform → 查詢操作（list/describe/get）可直接執行；變更操作引導走 Terraform（載入 `terraform` skill），**不要**直接用 gcloud 改 infra 資源
+3. 未偵測到 Terraform 或純查詢 → 直接進入操作流程
+
+### 2. 安全分級
 
 將所有操作分為三級：
 
 | 等級 | 說明 | 範例 | 處理方式 |
 |------|------|------|----------|
 | **安全（唯讀）** | 僅查詢、列出、描述資源 | `gcloud compute instances list`、`kubectl get pods`、`gcloud projects describe` | 直接執行 |
-| **低風險（修改）** | 建立、更新、擴縮資源 | `kubectl scale`、`gcloud compute instances start/stop`、`kubectl apply` | 說明影響後執行 |
+| **需確認（建立/修改）** | 建立、更新、擴縮資源 | `kubectl scale`、`gcloud compute instances start/stop`、`kubectl apply` | **必須確認流程**（見第 3 節） |
 | **高風險（破壞性）** | 刪除、清除、重置資源 | `gcloud compute instances delete`、`kubectl delete`、`gcloud projects delete`、`gcloud sql instances delete`、`kubectl drain`、任何帶 `--force` 的操作 | **必須完整確認流程** |
 
-### 2. 高風險操作確認流程
+### 3. 建立/修改操作確認流程（MANDATORY）
 
-遇到高風險操作時，**必須**依序執行以下步驟，缺一不可：
+任何會**建立或修改** GCP 資源的操作（含 `kubectl apply` / `scale`），**必須**依序執行：
+
+1. **明確列出**即將執行的完整指令
+2. **說明將建立/修改什麼資源**：資源類型、名稱、所屬專案 / 叢集 / 命名空間
+3. **預估費用影響**（如適用）：月費或一次性費用
+4. **詢問使用者確認**：使用 AskUserQuestion 明確詢問「是否確定執行？」
+5. **只有在使用者明確回答「是」、「確認」、`Y`、`Yes` 後**才執行
+
+**絕對禁止**在未經確認的情況下建立任何 GCP 資源，即使是免費或低成本資源。
+
+### 4. 刪除/破壞（高風險）操作確認流程
+
+遇到高風險操作時，在上述基礎上**必須**依序執行以下步驟，缺一不可：
 
 1. **明確列出**即將執行的完整指令
 2. **說明影響範圍**：受影響的資源名稱、所屬專案/叢集/命名空間、關聯資源
@@ -35,9 +57,14 @@ $ARGUMENTS
 
 **絕對禁止**在未經確認的情況下執行任何破壞性操作。
 
-### 3. 危險指令關鍵字偵測
+### 5. 危險指令關鍵字偵測
 
-以下關鍵字出現時，自動觸發高風險確認流程：
+**建立/修改類**（觸發第 3 節確認流程）：
+
+- `create`、`update`、`patch`、`apply`、`scale`、`resize`
+- `start`、`stop`、`enable`、`disable`、`set`、`add-iam-policy-binding`
+
+**刪除/破壞類**（觸發第 4 節高風險確認流程）：
 
 - `delete`、`remove`、`destroy`、`drain`、`cordon`
 - `purge`、`drop`、`reset`、`wipe`
@@ -45,7 +72,7 @@ $ARGUMENTS
 - `rollout undo`（回滾）
 - `replace`（替換整個資源）
 
-### 4. 查詢最佳實踐
+### 6. 查詢最佳實踐
 
 - 優先使用 `--format` 參數讓輸出更易讀：
   - `--format="table(name, zone, status)"` 表格格式
@@ -55,7 +82,7 @@ $ARGUMENTS
 - kubectl 查詢時善用 `-n` 指定 namespace、`-l` 篩選 label
 - 大量資源查詢時考慮加上 `--limit`
 
-### 5. GKE kubeconfig 取得（重要：優先走 `switch`）
+### 7. GKE kubeconfig 取得（重要：優先走 `switch`）
 
 當需要執行 `gcloud container clusters get-credentials` 取得 GKE 叢集憑證時，**絕對不要直接合併進 `~/.kube/config`**，必須先偵測本機是否安裝 `switch`（gardener/switcher / kubeswitch）。
 
@@ -89,7 +116,7 @@ $ARGUMENTS
 - `switch` 將每個叢集 kubeconfig 獨立放在不同檔案，避免 `~/.kube/config` 累積大量 context 造成切換混亂、洩漏風險與 merge 衝突。
 - 直接讓 gcloud 寫進 `~/.kube/config` 會破壞既有 switch 工作流並難以清理。
 
-### 6. 常用查詢參考
+### 8. 常用查詢參考
 
 **GKE / Kubernetes：**
 ```
@@ -145,53 +172,17 @@ gcloud logging read "resource.type=k8s_container" --limit=50
 gcloud monitoring dashboards list
 ```
 
-### 6. GKE 唯讀權限授予範本（實戰踩坑）
+### 9. GKE 唯讀權限授予 → 載入 `gcp-iam` skill
 
-當使用者要求「給某帳號 GKE 唯讀權限」時，依以下範本設定。**關鍵踩坑**：`roles/container.viewer` 能 list/get/describe Pod 物件與其他 K8s 資源，但**不含 `container.pods.getLogs`**，所以 `kubectl logs`（或 k9s 看 log）會報 `Forbidden: requires container.pods.getLogs`。而 `roles/logging.viewer` 只對 **Cloud Logging 主控台** 有效，對 `kubectl logs` 無效（兩者授權路徑不同）。
+當使用者要求「給某帳號 GKE 唯讀權限 / 看 pod log」時，**載入 `gcp-iam` skill**，依其 `references/gke-readonly.md` 範本操作（授權範本單一來源維護，不在此複寫）。
 
-| 需求 | 需要的角色 | 說明 |
-|------|-----------|------|
-| 唯讀叢集 / K8s 物件（pods、deployments、services… list/get/describe） | `roles/container.viewer` | GKE 唯讀基礎 |
-| `kubectl logs` / k9s 看 pod log | 自訂角色含 `container.pods.getLogs` | container.viewer **不含**，須額外補 |
-| Cloud Logging 主控台看歷史 / container log | `roles/logging.viewer` | 走 Cloud Logging，非 K8s API |
-
-**標準設定流程（全唯讀）：**
-
-```bash
-PROJECT=<project-id>
-MEMBER=user:<email>
-
-# 1. GKE 唯讀基礎
-gcloud projects add-iam-policy-binding $PROJECT \
-  --member=$MEMBER --role=roles/container.viewer --condition=None
-
-# 2. 建立「只含 getLogs」的自訂角色（首次建立，之後可重用）
-#    注意：透過 gcloud-mcp 執行時，--title/--description 不可含空格（會被再次切詞），用底線代替
-gcloud iam roles create gkePodLogViewer --project=$PROJECT \
-  --title=GKE_Pod_Log_Viewer --description=Readonly_pod_logs \
-  --permissions=container.pods.getLogs --stage=GA
-
-# 3. 綁定自訂角色 → 讓 kubectl logs / k9s 可看 log
-gcloud projects add-iam-policy-binding $PROJECT \
-  --member=$MEMBER --role=projects/$PROJECT/roles/gkePodLogViewer --condition=None
-
-# 4.（選用）Cloud Logging 主控台唯讀
-gcloud projects add-iam-policy-binding $PROJECT \
-  --member=$MEMBER --role=roles/logging.viewer --condition=None
-```
-
-**驗證 / 排錯：**
-- 若 `kubectl logs` 仍 `Forbidden` → 確認步驟 2、3 已執行；IAM 變更約 1–2 分鐘生效，token 會自動帶新權限，必要時重抓憑證：
-  `gcloud container clusters get-credentials <cluster> --project $PROJECT --region <region>`
-- k9s log 畫面**空白但無紅字** → 多半不是權限問題，而是只 tail 當下之後的 log：進 log 畫面按 `0` 載入全部歷史、按 `a` 切換所有容器。
-- 確認角色權限：`gcloud iam roles describe roles/container.viewer --format="value(includedPermissions)"`（可見其無 `getLogs`）。
-
-> 備註：含 `getLogs` 的預設角色（如 `roles/container.developer`）會帶寫入權限，破壞唯讀原則，故採「container.viewer + 自訂 getLogs 角色」最小權限組合。
+關鍵踩坑速記：`roles/container.viewer` **不含** `container.pods.getLogs`（`kubectl logs` / k9s 會 Forbidden，需自訂角色補）；`roles/logging.viewer` 只對 Cloud Logging 主控台有效，對 `kubectl logs` 無效。
 
 ## 回應格式
 
-1. 先理解使用者想查詢什麼資源
-2. 選擇適當的指令並判斷安全等級
-3. 安全操作直接執行並整理結果
-4. 修改/破壞性操作依確認流程處理
-5. 查詢結果以清晰的格式呈現，必要時加上說明
+1. 先理解使用者想做什麼（查詢 / 變更）
+2. 變更操作先執行 Terraform 偵測（第 1 節）
+3. 選擇適當的指令並判斷安全等級
+4. 安全（唯讀）操作直接執行並整理結果
+5. 建立/修改與刪除操作依對應確認流程處理（第 3、4 節）
+6. 查詢結果以清晰的格式呈現，必要時加上說明

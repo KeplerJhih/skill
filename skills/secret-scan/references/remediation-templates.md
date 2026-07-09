@@ -27,14 +27,14 @@ REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 REDIS_PASSWORD=
 
-# ===== 外部服務：台指期 API =====
-TQ_API_HOST=
-TQ_API_PORT=
-TQ_API_USER=
-TQ_API_PASS=
+# ===== 外部服務：合作方 API =====
+PARTNER_API_HOST=
+PARTNER_API_PORT=
+PARTNER_API_USER=
+PARTNER_API_PASS=
 
-# ===== 外部服務：Fugle =====
-FUGLE_API_KEY=
+# ===== 外部服務：行情資料 =====
+MARKET_DATA_API_KEY=
 ```
 
 **規則**：
@@ -68,18 +68,18 @@ import 'dotenv/config';
 **修復前（hardcoded）：**
 ```typescript
 export const redisConfig = {
-  host: "52.193.249.98",
+  host: "203.0.113.10",
   port: 6379,
   db: 1,
-  password: "Xq7#mK2$vL9@nR4w",
+  password: "Example#Pass123!",
 };
 
-export const TQ_API_HOST = "mpx8.tvmall.com.tw";
-export const TQ_API_PORT = 20001;
-export const TQ_API_USER = 'LIN1';
-export const TQ_API_PASS = '20231005';
+export const PARTNER_API_HOST = "partner-api.example.com";
+export const PARTNER_API_PORT = 20001;
+export const PARTNER_API_USER = 'example-user';
+export const PARTNER_API_PASS = 'example-pass';
 
-export const FUGLE_API_KEY = "MjhiNWM2MjgtNmFl...";
+export const MARKET_DATA_API_KEY = "xxxx-example-key...";
 ```
 
 **修復後（環境變數）：**
@@ -91,12 +91,12 @@ export const redisConfig = {
   password: process.env.REDIS_PASSWORD,
 };
 
-export const TQ_API_HOST = process.env.TQ_API_HOST || '';
-export const TQ_API_PORT = parseInt(process.env.TQ_API_PORT || '20001', 10);
-export const TQ_API_USER = process.env.TQ_API_USER || '';
-export const TQ_API_PASS = process.env.TQ_API_PASS || '';
+export const PARTNER_API_HOST = process.env.PARTNER_API_HOST || '';
+export const PARTNER_API_PORT = parseInt(process.env.PARTNER_API_PORT || '20001', 10);
+export const PARTNER_API_USER = process.env.PARTNER_API_USER || '';
+export const PARTNER_API_PASS = process.env.PARTNER_API_PASS || '';
 
-export const FUGLE_API_KEY = process.env.FUGLE_API_KEY || '';
+export const MARKET_DATA_API_KEY = process.env.MARKET_DATA_API_KEY || '';
 ```
 
 ### 注意事項
@@ -128,11 +128,11 @@ load_dotenv()
 
 **修復前（hardcoded）：**
 ```python
-SERVER_IP = "15.168.61.136"
-SERVER_PORT = 58699
-USERNAME = "AXAsw2S"
+SERVER_IP = "203.0.113.20"
+SERVER_PORT = 50000
+USERNAME = "example-user"
 
-r = redis.Redis(host='127.0.0.1', port=6379, db=0, password='Xq7#mK2$vL9@nR4w')
+r = redis.Redis(host='127.0.0.1', port=6379, db=0, password='Example#Pass123!')
 ```
 
 **修復後（環境變數）：**
@@ -140,7 +140,7 @@ r = redis.Redis(host='127.0.0.1', port=6379, db=0, password='Xq7#mK2$vL9@nR4w')
 import os
 
 SERVER_IP = os.getenv('DATA_SERVER_IP', '')
-SERVER_PORT = int(os.getenv('DATA_SERVER_PORT', '58699'))
+SERVER_PORT = int(os.getenv('DATA_SERVER_PORT', '50000'))
 USERNAME = os.getenv('DATA_SERVER_USER', '')
 
 r = redis.Redis(
@@ -168,8 +168,8 @@ Laravel 已內建 `env()` helper，通常 config 檔已正確使用。
 **修復前（若在非 config 檔中 hardcode）：**
 ```php
 $redis = new Redis();
-$redis->connect('52.193.249.98', 6379);
-$redis->auth('Xq7#mK2$vL9@nR4w');
+$redis->connect('203.0.113.10', 6379);
+$redis->auth('Example#Pass123!');
 ```
 
 **修復後：**
@@ -189,18 +189,18 @@ Redis::connection()->ping();
 
 ```php
 // config/services.php
-'tq_api' => [
-    'host' => env('TQ_API_HOST'),
-    'port' => env('TQ_API_PORT', 20001),
-    'user' => env('TQ_API_USER'),
-    'pass' => env('TQ_API_PASS'),
+'partner_api' => [
+    'host' => env('PARTNER_API_HOST'),
+    'port' => env('PARTNER_API_PORT', 20001),
+    'user' => env('PARTNER_API_USER'),
+    'pass' => env('PARTNER_API_PASS'),
 ],
 ```
 
 ### 注意事項
 
 - Laravel 的 `env()` 在 config cache 後不可用，**務必只在 config/*.php 中使用** `env()`
-- 應用程式碼中使用 `config('services.tq_api.host')` 讀取
+- 應用程式碼中使用 `config('services.partner_api.host')` 讀取
 - 非 Laravel 的原生 PHP 使用 `getenv('VAR_NAME')` 或 `$_ENV['VAR_NAME']`
 
 ---
@@ -214,8 +214,8 @@ Redis::connection()->ping();
 db, err := sql.Open("mysql", "root:secret@tcp(192.168.1.1:3306)/mydb")
 
 redisClient := redis.NewClient(&redis.Options{
-    Addr:     "52.193.249.98:6379",
-    Password: "Xq7#mK2$vL9@nR4w",
+    Addr:     "203.0.113.10:6379",
+    Password: "Example#Pass123!",
 })
 ```
 
@@ -339,7 +339,7 @@ private String apiKey;
 **修復前：**
 ```rust
 let password = "secret123";
-let redis_url = "redis://:Xq7#mK2$vL9@nR4w@52.193.249.98:6379/0";
+let redis_url = "redis://:Example#Pass123!@203.0.113.10:6379/0";
 ```
 
 **修復後：**
@@ -368,13 +368,13 @@ let redis_password = env::var("REDIS_PASSWORD").ok();
 
 ```yaml
 services:
-  datasource-tq:
+  datasource-worker:
     build:
       context: ./backend/node
       dockerfile: .devops/dockerfile
     env_file:
       - ./backend/node/.env
-    command: ["npx", "ts-node", "-T", "src/tq.data.ts"]
+    command: ["npx", "ts-node", "-T", "src/worker.ts"]
 ```
 
 ### .env 檔案位置
@@ -382,9 +382,9 @@ services:
 每個服務維護獨立的 `.env`：
 
 ```
-backend/node/.env          # Node.js datasource 的環境變數
-backend/python/.env        # Python demo data 的環境變數
-backend/futures/.env       # Laravel 的環境變數
+backend/node/.env          # Node.js 服務的環境變數
+backend/python/.env        # Python 服務的環境變數
+backend/php/.env           # PHP (Laravel) 服務的環境變數
 ```
 
 ### .dockerignore 排除

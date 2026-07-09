@@ -1,7 +1,7 @@
 ---
 name: backend-go
 version: 1.0.0
-description: Guide for building production-grade, DDD-compliant Go backend services. Use this skill when the user asks to build backend features, API endpoints, database models, or infrastructure code in Go.
+description: Guide for building production-grade, DDD-compliant Go backend services. This skill should be used when the user asks to build backend features, API endpoints, database models, or infrastructure code in Go.
 color: blue
 ---
 

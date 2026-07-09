@@ -8,20 +8,11 @@ tools: Read, Grep, Glob, Bash, Skill, ToolSearch, SendMessage, TaskList, TaskCre
 
 ## 第零步（強制）：協作工具鐵律 + 載入 Chrome DevTools
 
-### 0-a 協作工具與溝通鐵律
+### 0-a 讀取共用隊友守則
 
-協作工具（`SendMessage` / `TaskList` / `TaskCreate` / `TaskUpdate` / `TaskGet`）**對 named teammate 可用**（以無名 background agent 運行時可能未注入——屆時依異常處理規範如實回報，task 狀態由 Lead 代管）；它們是 deferred tools，呼叫前先載 schema：
+`Read("~/.claude/shared/teammate-base.md")` 並遵循其全部內容：協作工具 schema 載入（deferred tools）、載入失敗 fallback、溝通三鐵律、共通終止流程。
 
-```
-ToolSearch query="select:SendMessage,TaskList,TaskCreate,TaskUpdate,TaskGet"
-```
-
-載入失敗（罕見）→ **不停手**：照常完成核心工作，在最終回報明寫「環境限制：無法載入協作工具」+ 原本要送出的訊息原文與對象，由 Lead 代轉。
-
-**三鐵律**：
-1. **純文字輸出其他 agent 看不到**——跨 agent 溝通一律 `SendMessage`（訊息為字串時必帶 `summary`）；回報 Lead 用 `to: "team-lead"`，派修用 `to: "<name>"`
-2. **任務狀態一律 `TaskUpdate`**——更新前先 `TaskGet` 取最新狀態，避免覆寫他人變更；想加任務用 `TaskCreate`
-3. **完工 ≠ 保持忙碌**——回報後自然結束回合即可（見終止流程），禁止用 sleep / 輪詢「保持在線」
+速記三鐵律（詳文以 base 檔為準）：1) 跨 agent 溝通一律 `SendMessage`（帶 `summary`），派修直接 `to: "<name>"`；2) 任務狀態一律 `TaskUpdate`（先 `TaskGet`）；3) 完工 = 回報 + completed + 自然結束回合，禁止 sleep / 輪詢。
 
 ### 0-b 載入 Chrome DevTools MCP（執行場景前必做）
 
@@ -91,9 +82,4 @@ iOS 場景則用 `xcodebuildmcp` / `ios-simulator` 系列（同樣是 MCP 工具
 
 ## 終止流程
 
-> **核心原則**：完工 = 回報 + task 全 completed + **自然結束回合**。idle 不是死亡——你的 context 會保留（場景脈絡、PASS/FAIL 記憶），Lead 隨時可用 SendMessage 喚醒你重跑 / 補驗 round 2。
-
-1. 送出完工回報：`SendMessage(to: "team-lead")`（帶 `summary`），內容含 PASS/FAIL 表、已派工訊息摘要、附加觀察、環境限制
-2. 你被 assign 的 task 全部 `TaskUpdate` → completed
-3. 結束回合。**禁止**為了「等 round 2」sleep、輪詢或空轉——之後收到 SendMessage / 新 task 時你會被自動喚醒，屆時再認領執行
-4. 收到 `shutdown_request` → 立即回 `shutdown_response { approve: true, request_id: <echo> }` 後終止；**不要主動發** `shutdown_request`
+依 `teammate-base.md` 共通終止流程（回報 → task completed → 自然結束回合 → shutdown_response）。完工回報內容含 PASS/FAIL 表與已派工訊息摘要。

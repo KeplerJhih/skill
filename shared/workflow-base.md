@@ -27,6 +27,7 @@ CLAUDE.md 是專案地圖的 **single source of truth**。
 1. **必讀**：根 `./CLAUDE.md`（如存在）→ 取得專案地圖、變數宣告、慣例
 2. **必讀**：任務涉及的子目錄 `CLAUDE.md` → 取得局部規範
 3. **解析變數**：抽取 CLAUDE.md 宣告的工作目錄變數（`{*_DIR}`），後續流程使用
+4. **範本偵測**：CLAUDE.md 含 `{PROJECT_NAME}` 等佔位符 → 仍是未填範本，**視同無地圖**、內容不得當事實；依範本頂部「⚠️ 範本狀態區塊」指令先補完（掃描 → 裁剪 → 用戶確認 → 寫入）再續行原任務
 
 ### 步驟 1：自動掃描 CLAUDE.md（條件性，僅 Code/跨子專案任務）
 
@@ -66,7 +67,7 @@ CLAUDE.md 仍有資訊缺口時：
 
 ### 偵測規則
 
-1. CLAUDE.md 是真實來源——它的描述優於檔案系統推論
+1. CLAUDE.md 是真實來源——它的描述優於檔案系統推論（未填範本除外，見步驟 0 範本偵測）
 2. CLAUDE.md 與檔案系統衝突時，以 CLAUDE.md 為準並提示更新
 3. Skill 名稱由「可用 Skill 清單」動態匹配，**不寫死於本檔案**
 4. 任務藍圖必須標示偵測到的內容與來源（CLAUDE.md / Serena / Glob）
@@ -345,8 +346,8 @@ Code 任務且變更有可執行面時，測試通過後**必須**實際驅動�
 
 `settings.json` 配置的 task hooks 對**所有 session** 生效（不限 /team，2026-07 實測確認）：
 
-- **TaskCreate**：subject ≥ 6 字、description 不可為空，否則拒建。
-- **TaskUpdate → completed**：subject 含「契約 / contract」的 task，需專案內任一 `contracts/` 目錄近 2 小時內有 `.api.md` 變動才放行（契約先寫再結案）。
+- **TaskCreated hook**（task 建立時）：subject ≥ 6 字、description 不可為空，否則拒建。
+- **TaskCompleted hook**（task 標 completed 時）：subject 含「契約 / contract」的 task，需專案內任一 `contracts/` 目錄近 2 小時內有 `.api.md` 變動才放行（契約先寫再結案）。
 - **被 hook 拒絕時**：依「⛔ 停損原則」第 2 條處理。
 
 ---

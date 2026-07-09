@@ -47,7 +47,7 @@ version: 0.1.0
 | `aws-docs` (search/read) | 查閱 AWS 官方文件 | 確認服務規格、限制、定價 |
 | `aws-cdk` | CDK 指導與 Solutions Construct | CDK 專案的架構建議 |
 
-使用前先以 `ToolSearch query="aws-api"` 載入工具 schema。
+使用前先以 `ToolSearch query="aws-api"` 載入工具 schema。實際 server 名稱依安裝方式而異（官方套件為 `awslabs.aws-api` / `awslabs.aws-docs`，工具前綴 `mcp__awslabs_*`），以 ToolSearch 載回為準；`aws-cdk` 為選配，未連線時以 `aws-docs` + WebSearch 替代；EKS 操作可用 `awslabs.eks` MCP（若已連線）。
 
 ---
 

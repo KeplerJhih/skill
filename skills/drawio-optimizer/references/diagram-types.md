@@ -215,7 +215,7 @@ sequenceDiagram
 
 ## Mermaid 速查
 
-適合用 `mcp__drawio__open_drawio_mermaid` 的場景：
+適合用 `mcp__drawio-mcp__open_drawio_mermaid` 的場景：
 
 ```mermaid
 %% 流程圖

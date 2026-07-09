@@ -19,11 +19,13 @@ version: 0.1.0
 
 | 工具 | 用途 | 適用場景 |
 |------|------|---------|
-| `mcp__drawio__open_drawio_xml` | 以 XML 建立/編輯圖表 | 精細控制佈局、複雜架構圖、需要避免連線重疊 |
-| `mcp__drawio__open_drawio_mermaid` | 以 Mermaid 語法建立圖表 | 快速原型、簡單流程圖、序列圖 |
-| `mcp__drawio__open_drawio_csv` | 以 CSV 建立圖表 | 組織架構圖、大量同質節點 |
+| `mcp__drawio-mcp__open_drawio_xml` | 以 XML 建立/編輯圖表 | 精細控制佈局、複雜架構圖、需要避免連線重疊 |
+| `mcp__drawio-mcp__open_drawio_mermaid` | 以 Mermaid 語法建立圖表 | 快速原型、簡單流程圖、序列圖 |
+| `mcp__drawio-mcp__open_drawio_csv` | 以 CSV 建立圖表 | 組織架構圖、大量同質節點 |
 
 **選擇策略**：需要精確控制佈局與連線時，使用 XML；快速草圖用 Mermaid；表格式資料用 CSV。
+
+> ⚠️ 工具前綴以 `ToolSearch` 實際載回為準（server 名稱為 `drawio-mcp`）。
 
 ---
 
@@ -122,7 +124,7 @@ Good: subnet-gke → DB, subnet-vm → DB  (2 條線)
 2. **元件規劃**：列出所有節點、分組、連線關係
 3. **佈局設計**：規劃分層結構與間距，確保連線不重疊
 4. **XML 建構**：組裝 `mxGraphModel` XML，套用配色與樣式
-5. **預覽驗證**：使用 `mcp__drawio__open_drawio_xml` 開啟預覽
+5. **預覽驗證**：使用 `mcp__drawio-mcp__open_drawio_xml` 開啟預覽
 6. **迭代修正**：根據用戶回饋調整佈局、配色或連線
 
 ### 情境 B：優化現有圖表
@@ -189,7 +191,7 @@ Good: subnet-gke → DB, subnet-vm → DB  (2 條線)
 
 ## 圖表存放位置
 
-所有 `.drawio` 檔案存放在：
+所有 `.drawio` 檔案存放在（專案 CLAUDE.md 另有宣告圖表目錄則從專案）：
 
 ```
 <project-root>/devops/draw.io/

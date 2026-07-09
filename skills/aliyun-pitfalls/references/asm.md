@@ -80,7 +80,7 @@ kubectl -n kube-system logs -l app=cluster-autoscaler --tail=500 \
 ```
 
 **修法（針對性、最安全）**：給注入 sidecar 的 workload pod 加 annotation
-`cluster-autoscaler.kubernetes.io/safe-to-evict: "true"`（已在 `devops/k8s/aquawin/charts/backend/templates/deployment.yaml`）。
+`cluster-autoscaler.kubernetes.io/safe-to-evict: "true"`（加在專案 Helm chart 的 backend deployment template）。
 - **安全前提**：實查該 NS **無 app 級 emptyDir**（只剩 sidecar 的，純 ephemeral，驅逐重排後重生無損）。
 - 替代解：autoscaler config `skip_nodes_with_local_storage=false`（全域、較鈍，連 kube-system addon 節點也放行）。
 - ⚠️ sidecar fix **不解決第 1 層**：request 灌太高仍會讓節點 ≥ 門檻而不縮 —— 真要縮得一起修 CPU request。

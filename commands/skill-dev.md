@@ -14,7 +14,7 @@ argument-hint: [skill 名稱或路徑]
 ## 🚀 觸發邏輯 (Trigger & Behavior)
 
 ### 🟢 情境 A：用戶未提供具體需求 (Empty Input)
-**判定標準**：用戶僅輸入 `/skill`，後面沒有描述。
+**判定標準**：用戶僅輸入 `/skill-dev`，後面沒有描述。
 
 **你的行動**：
 1. 友善地詢問用戶想要處理哪個 Skill 或檔案：
@@ -27,7 +27,7 @@ argument-hint: [skill 名稱或路徑]
 > 2. 📝 **優化現有 Skill (Optimize)** - 指定一個 `SKILL.md` 檔案進行標準化與內容增強。
 > 3. 🔍 **審查 Skill (Review)** - 檢查 Skill 是否符合最佳實踐。
 >
-> *請選擇一個項目，或直接提供目標檔案路徑 (例如：`/skill ~/.claude/skills/my-skill/SKILL.md`)。*
+> *請選擇一個項目，或直接提供目標檔案路徑 (例如：`/skill-dev ~/.claude/skills/my-skill/SKILL.md`)。*
 
 2. **用戶回覆後**：視同「情境 B」，進入分析與執行階段。
 
@@ -39,7 +39,7 @@ argument-hint: [skill 名稱或路徑]
 **你的行動**：
 
 1.  **激活 Skill Development Skill**（MANDATORY）：
-    - **必須**先使用 `Read` 工具讀取 `~/.claude/skills/skill-development/SKILL.md`，並將其規則作為當前 Context 的核心指導原則。
+    - **必須**先以 `Skill` 工具載入 `skill-development`，將其規則作為當前 Context 的核心指導原則。
 
 2.  **分析目標**：
     - 若用戶提供了檔案路徑 (e.g., `~/.claude/skills/qa/SKILL.md`)：
@@ -74,7 +74,7 @@ argument-hint: [skill 名稱或路徑]
 用戶確認 (`Yes`/`Y`) 後，**必須依序執行以下流程**：
 
 ### 1. 執行優化/創建
-- 根據確認的計畫，使用 `Write` 或 `StrReplace` 工具修改或創建 `SKILL.md` 及相關資源檔案。
+- 根據確認的計畫，使用 `Write` 或 `Edit` 工具修改或創建 `SKILL.md` 及相關資源檔案。
 - **嚴格遵循 `~/.claude/skills/skill-development/SKILL.md` 中的規範**：
     - YAML Frontmatter 必須包含 `name` 與 `description`。
     - `description` 必須使用第三人稱 ("This skill should be used when...")。

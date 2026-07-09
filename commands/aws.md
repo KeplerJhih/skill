@@ -17,9 +17,12 @@ $ARGUMENTS
 
 | MCP Server | 用途 | 工具前綴 |
 |---|---|---|
-| **aws-api** | 透過 AWS CLI 指令與 AWS 服務互動（查詢、管理資源） | `mcp__aws-api__` |
-| **aws-docs** | 搜尋與讀取 AWS 官方文件 | `mcp__aws-docs__` |
-| **aws-cdk** | CDK 指導、NAG 規則檢查、GenAI 構造搜尋 | `mcp__aws-cdk__` |
+| **awslabs.aws-api** | 透過 AWS CLI 指令與 AWS 服務互動（查詢、管理資源） | `mcp__awslabs_aws-api__` |
+| **awslabs.aws-docs** | 搜尋與讀取 AWS 官方文件 | `mcp__awslabs_aws-docs__` |
+| **awslabs.eks** | EKS 叢集管理與 K8s 資源操作（若已連線） | `mcp__awslabs_eks__` |
+| **aws-cdk** | CDK 指導、NAG 規則檢查、GenAI 構造搜尋（選配） | `mcp__aws-cdk__` |
+
+> ⚠️ server 名稱與前綴隨安裝方式而異（官方套件為 `awslabs.*`），一律以 `ToolSearch` 實際載回的名稱為準。
 
 ### 工具探索（首次使用必做）
 
@@ -28,8 +31,8 @@ $ARGUMENTS
 ```
 ToolSearch query="aws-api" max_results=10      # AWS CLI 操作
 ToolSearch query="aws-docs" max_results=10     # 文件查詢
-ToolSearch query="aws-cdk" max_results=10      # CDK 指導
-ToolSearch query="aws-terraform" max_results=10 # Terraform（若需要）
+ToolSearch query="eks" max_results=10          # EKS 叢集操作（若需要）
+ToolSearch query="aws-cdk" max_results=10      # CDK 指導（若需要）
 ```
 
 ### MCP 可用性檢查（MANDATORY — 在操作前執行）
@@ -42,7 +45,8 @@ ToolSearch query="aws-terraform" max_results=10 # Terraform（若需要）
 > |---|---|---|
 > | aws-api | ✅ 可用 / ❌ 無法連線 | [具體狀態] |
 > | aws-docs | ✅ 可用 / ❌ 無法連線 | [具體狀態] |
-> | aws-cdk | ✅ 可用 / ❌ 無法連線 | [具體狀態] |
+> | eks | ✅ 可用 / ❌ 無法連線 | [具體狀態]（選配，未安裝屬正常） |
+> | aws-cdk | ✅ 可用 / ❌ 無法連線 | [具體狀態]（選配，未安裝屬正常） |
 >
 > **⚠️ 以下 MCP server 無法使用：**
 > - `[server 名稱]`：[可能原因，如 server 未啟動、未安裝、設定錯誤等]
@@ -55,7 +59,7 @@ ToolSearch query="aws-terraform" max_results=10 # Terraform（若需要）
 > **降級方案**：無法使用 MCP 時，可改用以下替代方式：
 > - `aws-api` 不可用 → 改用 Bash + `aws` CLI 直接執行（需使用者已配置 AWS credentials）
 > - `aws-docs` 不可用 → 改用 `WebSearch` 搜尋 AWS 官方文件
-> - `aws-cdk` 不可用 → 改用 `WebSearch` + `context7` 查詢 CDK 文件
+> - `aws-cdk` 不可用 → 改用 `WebSearch` / `WebFetch` 查詢 CDK 官方文件
 
 **重要**：若所有 AWS MCP server 皆無法使用，必須明確告知使用者，並詢問是否要以降級方案（Bash + AWS CLI）繼續。不得靜默忽略 MCP 連線失敗。
 
@@ -297,6 +301,7 @@ aws ce get-cost-and-usage --time-period Start=YYYY-MM-DD,End=YYYY-MM-DD --granul
 | 場景 | 主要工具 | 輔助工具 |
 |------|---------|---------|
 | 查詢現有資源 | `aws-api` (call_aws) | — |
+| EKS 叢集 / K8s 資源操作 | `awslabs.eks` MCP（若可用） | Bash + kubectl（kubeconfig 走第 6 節 switch 流程） |
 | 了解服務功能/配置 | `aws-docs` (search/read) | `aws-api` (suggest) |
 | CDK 專案開發 | `aws-cdk` | `aws-docs` |
 | 規劃新架構 | `aws-docs` + `aws-cdk` | `aws-api` (查現況) |

@@ -6,7 +6,7 @@ description: 根據當前 branch 與目標 branch 的差異，自動產生 Pull 
 
 # Git PR Description — 自動產生 PR 標題與描述
 
-根據當前 branch 相對於目標 branch（預設 `dev`）的所有 commit 與 diff，產出結構化的 PR Title 與 Description。
+根據當前 branch 相對於目標 branch（未指定時自動偵測 repo 預設分支）的所有 commit 與 diff，產出結構化的 PR Title 與 Description。
 
 ---
 
@@ -18,14 +18,19 @@ description: 根據當前 branch 與目標 branch 的差異，自動產生 Pull 
 
 ```bash
 git branch --show-current
+
+# 目標 branch：使用者指定優先；未指定則自動偵測 repo 預設分支
+BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's|^origin/||')
+[ -z "$BASE_BRANCH" ] && BASE_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null)
+[ -z "$BASE_BRANCH" ] && BASE_BRANCH=master   # 都偵測不到才退回，並向使用者確認
 ```
 
-預設目標 branch 為 `master`。若使用者指定其他 base branch，以使用者指定為準。
+若使用者指定其他 base branch，以使用者指定為準。
 
 確認當前 branch 相對於目標 branch 有 commit 差異：
 
 ```bash
-git log --oneline master..HEAD
+git log --oneline $BASE_BRANCH..HEAD
 ```
 
 若無差異，告知使用者「當前 branch 與目標 branch 沒有差異」後結束。
@@ -38,16 +43,16 @@ git log --oneline master..HEAD
 
 ```bash
 # commit 摘要
-git log --oneline master..HEAD
+git log --oneline $BASE_BRANCH..HEAD
 
 # 詳細 commit 訊息
-git log --format="%h %s%n%b" master..HEAD
+git log --format="%h %s%n%b" $BASE_BRANCH..HEAD
 
 # 變更檔案統計
-git diff --stat master..HEAD
+git diff --stat $BASE_BRANCH..HEAD
 
 # 完整 diff（用於分析具體改動）
-git diff master..HEAD
+git diff $BASE_BRANCH..HEAD
 ```
 
 ---

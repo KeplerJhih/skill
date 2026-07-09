@@ -89,7 +89,7 @@ version: 1.0.0
 
 #### 2a. 修復流程（每個 finding 重複此流程）
 
-1. **定義環境變數名稱** — 依命名慣例：`SCREAMING_SNAKE_CASE`，前綴分類（如 `REDIS_PASSWORD`、`TQ_API_HOST`）
+1. **定義環境變數名稱** — 依命名慣例：`SCREAMING_SNAKE_CASE`，前綴分類（如 `REDIS_PASSWORD`、`PARTNER_API_HOST`）
 2. **替換 hardcode 為環境變數讀取** — 依語言使用對應的 `env()` / `os.Getenv()` / `process.env.` 等
 3. **更新 `.env.example`** — 加入新變數，值留空或用佔位符
 4. **更新 `.env`**（若存在且不在版控中）— 填入實際值
@@ -101,7 +101,7 @@ version: 1.0.0
 |------|------|------|
 | 資料庫 | `DB_` | `DB_HOST`, `DB_PASSWORD` |
 | Redis | `REDIS_` | `REDIS_HOST`, `REDIS_PASSWORD` |
-| 外部 API | `{SERVICE}_` | `FUGLE_API_KEY`, `TQ_API_HOST` |
+| 外部 API | `{SERVICE}_` | `STRIPE_API_KEY`, `PARTNER_API_HOST` |
 | SMTP 郵件 | `MAIL_` | `MAIL_PASSWORD`, `MAIL_HOST` |
 | JWT 認證 | `JWT_` | `JWT_SECRET`, `JWT_TTL` |
 | 通用 | `APP_` | `APP_SECRET`, `APP_DEBUG` |

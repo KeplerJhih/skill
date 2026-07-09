@@ -186,7 +186,7 @@ Source entrypoint / BC ──► Build pivot target ──► Per-service CI spe
         └──► Containerfile                                  └──► Registry push path ◄──── Deployment pull path (Helm)
 ```
 
-> **本專案具體驗證鏈**（依使用者指示，以代碼為出發）：
+> **範例驗證鏈**（Jenkins + CodeBuild + Make + Helm 棧，以代碼為出發）：
 > `code (cmd/service/<x>, boundedContext/<x>, ServiceName) → Makefile build-<x> → buildspec-<x> / SERVICE_NAME → Jenkinsfile CODEBUILD_SERVICES → AWS CodeBuild project → Helm values apps key`
 > 每一段都問「下游有沒有忠實反映代碼名」，**任一段不符 → 該段是待修的下游，不是改代碼的理由**。
 
@@ -218,7 +218,7 @@ baz            | ✅         | ✅         | ✅          | ✅     | ❌(file m
 
 ### 3.5.3 不可省略的 sanity check
 
-- **Registry 字面相等**：Push path 與 Pull path 必須**完整字串相等**（含 region / project / repo / 前綴）。常見坑：buildspec push 到 `gaming/rgs-backend-go-X`，Helm 算出 `gaming/rgs-X`（漏掉 prefix）→ 100% ImagePullBackOff。
+- **Registry 字面相等**：Push path 與 Pull path 必須**完整字串相等**（含 region / project / repo / 前綴）。常見坑：buildspec push 到 `<repo>/<prefix>-X`，Helm 算出 `<repo>/X`（漏掉 prefix）→ 100% ImagePullBackOff。
 - **Variable resolution**：Makefile 用 `$(DOCKERFILE_PATH_X)` 等變數時，必須展開後再驗檔案存在，不能只看字面有 `-f`。
 - **大小寫**：Pivot target、CI spec 變數、containerfile basename 可能各自大小寫不同（如 buildspec lowercase、dockerfile camelCase），用 string equality 驗時要先正規化或顯式記錄。
 - **Tag / commit-hash 計算一致性（多來源，血淚換來）**：同一個 image tag 的 hash 段，往往在**多個獨立位置各算一次**——push 到 registry 的 CI（buildspec `git rev-parse --short`）、orchestrator 推的 audit git tag（Jenkins `createImmutableTag`）、**通知 / 顯示層**（Discord/Slack 用 `env.GIT_COMMIT.take(7)` 之類**完全不同的取法**）、deploy manifest 寫死的 tag。這些只要有一處長度 / 算法不同，就會 tag 不符 → ImagePullBackOff，或「顯示的 tag」與「實際 push 的 tag」不一致（更陰，會誤導人照貼進 deploy）。
@@ -411,6 +411,6 @@ Inventory pattern:    <basename_lowercase_no_hyphens><role_suffix>
 
 🔴 高優先 — value-uat global tag 為 X，但 outboxworker image 無此 tag → 部署會 ImagePullBackOff
 🔴 高優先 — foo-svc Jenkins 指 codebuild project 但無對應 Makefile build target → CI 必失敗
-🟡 中優先 — AWS CodeBuild project `gaming-...-outboxpublisher` 是孤兒，無 Jenkins 引用
-🟢 低優先 — GCP image `rgs-backend-go-outboxpublisher` 是孤兒（無自動 build pipeline）
+🟡 中優先 — AWS CodeBuild project `<org>-...-outboxpublisher` 是孤兒，無 Jenkins 引用
+🟢 低優先 — GCP image `<prefix>-outboxpublisher` 是孤兒（無自動 build pipeline）
 ```

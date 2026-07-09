@@ -27,6 +27,8 @@ argument-hint: [圖檔或同步方向]
 
 ## 產出存放位置
 
+預設慣例如下（專案 CLAUDE.md 另有宣告 `{INFRA_DIR}` / 圖表目錄則從專案）：
+
 ```text
 <project-root>/
 ├── devops/
@@ -128,7 +130,7 @@ argument-hint: [圖檔或同步方向]
    | `ingress` / `lb` / `load balancer` | 負載均衡 | `k8s ingress neg` |
    | `iap` | 身份感知代理 | `GCP IAP` |
    | `nfs` / `filestore` | 檔案儲存 | `nfs-server` |
-   | IP 位址標註 | 靜態 IP | `203.0.113.55` |
+   | IP 位址標註 | 靜態 IP | `203.0.113.10` |
    | 連線標籤 | 存取關係 | `統一出站`、`訪問` |
 
 4. **展示解析結果**，讓用戶確認：
@@ -196,10 +198,10 @@ argument-hint: [圖檔或同步方向]
 
 1. **【檢查】確認 `terraform` skill 已載入**：若階段 1 未載入，此處必須補載。
 2. 依照 `terraform` skill 規範生成 `.tf` 檔案
-2. 使用 `references/gcp-patterns.md` 中的 resource patterns
-3. 所有可變值透過 `variables.tf` 管理，不 hardcode
-4. 從 drawio 中提取的具體數值（IP、CIDR、規格）寫入 `terraform.tfvars`
-5. 生成後執行 `terraform fmt` + `terraform validate`（若 terraform CLI 可用）
+3. 使用 `terraform` skill 的 `references/gcp-patterns.md`（GCP 時）中的 resource patterns
+4. 所有可變值透過 `variables.tf` 管理，不 hardcode
+5. 從 drawio 中提取的具體數值（IP、CIDR、規格）寫入 `terraform.tfvars`
+6. 生成後執行 `terraform fmt` + `terraform validate`（若 terraform CLI 可用）
 
 ### 階段 3：執行 Terraform（僅在用戶明確要求時）
 
@@ -296,7 +298,7 @@ argument-hint: [圖檔或同步方向]
 1. 先執行**頁面選擇流程**（若有指定 `.drawio` 檔案）
 2. 執行「模式一 階段 0」：解析選定頁面的架構圖元件
 3. 執行「模式二 階段 0」：查詢雲端狀態
-3. **三方比對**：
+4. **三方比對**：
 
 > ### 三方差異報告
 >
@@ -307,7 +309,7 @@ argument-hint: [圖檔或同步方向]
 > | old-vm | X | O | X | 殘留 Terraform 定義 |
 > | new-svc | O | X | X | 待建立 |
 
-4. 依差異產出修正方案，等待確認後執行
+5. 依差異產出修正方案，等待確認後執行
 
 ---
 

@@ -37,6 +37,7 @@ ARGUMENTS: $ARGUMENTS
 1. 使用 `context7` MCP 工具查詢官方文件：
    - 先用 `resolve-library-id` 找到庫的 ID
    - 再用 `query-docs` 查詢具體文件內容
+   - **`context7` 未連線時**：改用 `WebFetch` 直接抓官方文件頁 + `WebSearch` 補充，不因缺 MCP 而中斷
 2. **同時並行** `WebSearch` 查詢社群最佳實踐和範例
 3. 整合兩者結果，以官方文件為準，社群資料為補充
 

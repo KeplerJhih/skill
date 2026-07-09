@@ -475,6 +475,16 @@ module "compute" {
 | Module 間的接線 | main.tf | `network_id = module.networking.vpc_id` |
 | 衍生值 | locals | `name_prefix = "${var.project}-${var.env}"` |
 
+### tfvars 在 directory-per-env 下的額外價值
+
+即使每個環境有獨立的 main.tf，tfvars 在以下場景仍有獨特作用：
+
+| 場景 | 說明 |
+|------|------|
+| 同環境多組配置切換 | `terraform apply -var-file=loadtest.tfvars` vs 正常配置 |
+| 敏感值不進 git | tfvars 加入 `.gitignore`，main.tf 留在版控 |
+| CI/CD 動態注入 | 用 `TF_VAR_*` 環境變數或 `-var-file` 注入 |
+
 ### 實際案例：compute instances 的 subnet 引用
 
 `terraform.tfvars` 不能引用其他 resource 的輸出（如 `module.networking.subnet_ids`）。解法是在 tfvars 用人類友善的 key，在 main.tf 的 `locals` 或 `for` 表達式中解析：

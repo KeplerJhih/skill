@@ -70,7 +70,7 @@ ssh {user}@{host} "cd /data/dev/git/{project} && bash devops_{service}.sh"
 
 ### 2. AWS SSM (Systems Manager)
 
-優先使用 `mcp__aws-api__call_aws` MCP 工具：
+優先使用 `mcp__awslabs_aws-api__call_aws` MCP 工具（名稱以 ToolSearch 實際載回為準）：
 
 ```
 service: ssm
@@ -115,7 +115,7 @@ gcloud compute ssh {instance-name} --zone={zone} --project={gcp-project} \
 
 | 位置 | 參數 | 範例 |
 |------|------|------|
-| 1 | 專案名 | `141` |
+| 1 | 專案名 | `demo` |
 | 2 | 服務類型 | `backend` / `frontend` / `node` / `all` |
 | 3 | 環境 | `dev` / `uat` / `prod` |
 | 4 | 連線方式 | `ssh` / `ssm` / `gcloud` |
@@ -127,7 +127,7 @@ gcloud compute ssh {instance-name} --zone={zone} --project={gcp-project} \
 
 | 資訊 | 必填 | 預設值 | 說明 |
 |------|------|--------|------|
-| 專案名 (`project`) | 是 | — | 如 `141`、`money`、`california` |
+| 專案名 (`project`) | 是 | — | 如 `demo`、`shop` |
 | 服務類型 (`service`) | 是 | `all` | `backend` / `frontend` / `node` / `all` |
 | 環境 (`env`) | 否 | `dev` | `dev` / `uat` / `prod` |
 | 連線方式 (`method`) | 是 | — | `ssh` / `ssm` / `gcloud` |

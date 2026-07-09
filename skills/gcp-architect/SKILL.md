@@ -34,7 +34,7 @@ version: 0.1.0
 - **自動化優先**：使用 Cloud Build、Cloud Deploy 實現 CI/CD
 - **可觀測性**：Cloud Monitoring + Cloud Logging + Cloud Trace 三件套
 - **事件回應**：設定 Alerting Policies 與 On-call 輪值
-- **基礎設施即代碼**：Terraform / Deployment Manager 管理所有資源
+- **基礎設施即代碼**：Terraform 管理所有資源（Deployment Manager 已棄用，不採用）
 - **漸進式部署**：Canary / Blue-Green 策略降低發布風險
 
 ### 2. 安全性 (Security)

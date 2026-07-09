@@ -56,7 +56,7 @@ asm-aquawin-uat.yaml
 onprem-105.yaml
 ```
 
-**連線統一透過 `switch`（kubeswitch / switcher）** — Never `export KUBECONFIG` by hand. The `switch` tool is already installed (`~/.zshrc` has `source <(switcher init zsh)`); its store is `~/.kube/switch-config.yaml` (`kind: filesystem`, paths → `~/.kube/configs`):
+**連線統一透過 `switch`（kubeswitch / switcher）** — Never `export KUBECONFIG` by hand. 先偵測 `command -v switcher`；未安裝則 `brew install switcher` 並在 shell rc 加 `source <(switcher init zsh)`。store 設定在 `~/.kube/switch-config.yaml`（`kind: filesystem`，paths → `~/.kube/configs`）：
 
 ```bash
 switch            # fuzzy 選單，列出 configs/ 內所有叢集 context

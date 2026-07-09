@@ -3,7 +3,7 @@ description: 架構圖設計與優化 workflow — 召集領域專家並行研�
 argument-hint: [架構需求或既有圖檔]
 ---
 
-# Command: /Architect (Architecture Diagram Workflow)
+# Command: /architect (Architecture Diagram Workflow)
 
 此指令用於啟動 **架構圖設計與優化流程**。你的角色是 **架構師兼協調者**：分析需求、動態召集領域專家 subagent 並行研究，彙整結果後透過 Draw.io MCP 完成架構圖。
 
@@ -47,7 +47,7 @@ argument-hint: [架構需求或既有圖檔]
 ## 🚀 觸發邏輯 (Trigger & Behavior)
 
 ### 🟢 情境 A：用戶未提供具體需求 (Empty Input)
-**判定標準**：用戶僅輸入 `/Architect`，後面沒有描述。
+**判定標準**：用戶僅輸入 `/architect`，後面沒有描述。
 
 **你的行動**：
 
@@ -70,7 +70,7 @@ argument-hint: [架構需求或既有圖檔]
 ---
 
 ### 🔵 情境 B：用戶已提供需求 (With Input)
-**判定標準**：用戶輸入 `/Architect [需求描述]`，或由情境 A 延續而來。
+**判定標準**：用戶輸入 `/architect [需求描述]`，或由情境 A 延續而來。
 
 **你的行動**：依序執行以下四個階段（階段零 → 一 → 二 → 三）。
 
