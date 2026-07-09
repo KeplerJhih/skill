@@ -44,7 +44,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXEC_DIR=/data/dev/{project}/exec/{service}
 
 CONTAINER_IMAGE={project}/{service}
-XG_ENV=dev
+DEPLOY_ENV=dev
 ```
 
 | 變數 | 說明 | 命名規則 |
@@ -52,7 +52,7 @@ XG_ENV=dev
 | `DIR` | 腳本所在目錄 | 固定寫法 |
 | `EXEC_DIR` | 服務執行目錄 | `/data/dev/{project}/exec/{service}` |
 | `CONTAINER_IMAGE` | Docker image 名稱 | `{project}/{service}` |
-| `XG_ENV` | 環境標識 | `dev` / `uat` / `prod` |
+| `DEPLOY_ENV` | 環境標識 | `dev` / `uat` / `prod` |
 
 ### 3. 函式化（每個步驟獨立函式）
 
@@ -63,12 +63,12 @@ XG_ENV=dev
 ```bash
 git_pull(){
   echo "--- cd & git pull code ---"
-  git pull origin $XG_ENV
+  git pull origin $DEPLOY_ENV
 }
 
 docker_build(){
   echo "--- image build ---"
-  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV DOCKERFILE_PATH=./devops/dockerfile
+  make build-prod REPO=$CONTAINER_IMAGE:$DEPLOY_ENV DOCKERFILE_PATH=./devops/dockerfile
 }
 
 docker_CI_TEST(){
@@ -98,12 +98,12 @@ update_code(){
 ```bash
 git_pull(){
   echo "--- cd & git pull code ---"
-  git pull origin $XG_ENV
+  git pull origin $DEPLOY_ENV
 }
 
 docker_build(){
   echo "--- image build ---"
-  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV
+  make build-prod REPO=$CONTAINER_IMAGE:$DEPLOY_ENV
 }
 ```
 
@@ -188,12 +188,12 @@ echo "強制覆蓋：${rel}（原內容 diff 如下）"
 |----------|-----------|
 | 命令平鋪，無函式 | 拆分為 `git_pull`、`docker_build`、`update_code` 等函式 |
 | 硬編碼路徑 (`/data/htdocs/demo/...`) | 提取為 `EXEC_DIR` 變數 |
-| 硬編碼 image (`demo/php:dev`) | 提取為 `CONTAINER_IMAGE` + `XG_ENV` |
+| 硬編碼 image (`demo/php:dev`) | 提取為 `CONTAINER_IMAGE` + `DEPLOY_ENV` |
 | `docker build` 裸命令 | 改用 `make build-prod REPO=... DOCKERFILE_PATH=...` |
 | `cp -rf src/ dest/` 直接覆蓋 | 三步原子替換 |
 | 無入口函式 | 包裹在 `main()` 中 |
 | `echo "--- xxx ---"` 訊息不一致 | 統一格式 `echo "--- {動作描述} ---"` |
-| `BRANCH_NAME` 變數名 | 統一改為 `XG_ENV` |
+| `BRANCH_NAME` 變數名 | 統一改為 `DEPLOY_ENV` |
 | `$var` 緊貼全形/中文字元（如 `$rel（`） | `${var}` 加大括號（見輸出規範 §7） |
 
 ---
@@ -245,16 +245,16 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXEC_DIR=/data/dev/demo/exec/php
 
 CONTAINER_IMAGE=demo/php
-XG_ENV=dev
+DEPLOY_ENV=dev
 
 git_pull(){
   echo "--- cd & git pull code ---"
-  git pull origin $XG_ENV
+  git pull origin $DEPLOY_ENV
 }
 
 docker_build(){
   echo "--- image build ---"
-  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV DOCKERFILE_PATH=./devops/dockerfile
+  make build-prod REPO=$CONTAINER_IMAGE:$DEPLOY_ENV DOCKERFILE_PATH=./devops/dockerfile
 }
 
 docker_CI_TEST(){
@@ -297,16 +297,16 @@ set -o pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CONTAINER_IMAGE=demo/web
-XG_ENV=dev
+DEPLOY_ENV=dev
 
 git_pull(){
   echo "--- cd & git pull code ---"
-  git pull origin $XG_ENV
+  git pull origin $DEPLOY_ENV
 }
 
 docker_build(){
   echo "--- image build ---"
-  make build-prod REPO=$CONTAINER_IMAGE:$XG_ENV
+  make build-prod REPO=$CONTAINER_IMAGE:$DEPLOY_ENV
 }
 
 main(){
