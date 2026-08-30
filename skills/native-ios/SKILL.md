@@ -249,3 +249,7 @@ struct ExampleView: View {
 2. **HID 打字會讓 iOS 認定「有實體鍵盤」**：軟體鍵盤隨後不再升起（焦點 caret 還在、鍵盤不見），且 `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false` + 重啟 Simulator 只在下次打字前有效。這是模擬器環境特性、非 app bug——驗「鍵盤黏附/收合」類行為要在打字前截圖，或改真機。
 3. **向 app 注入環境變數**：`SIMCTL_CHILD_` 前綴 + `simctl launch` 會把變數傳給 app 行程（如 `SIMCTL_CHILD_MY_API_BASE_URL=http://127.0.0.1:8080 xcrun simctl launch <udid> <bundle-id>`）。搭配 app 內 `ProcessInfo.processInfo.environment` 的 base URL 覆蓋點，可零改碼把 app 指向本機後端做 E2E；注意**只對該次 launch 有效**，使用者手動點 icon 重開就失效。
 4. **文字欄清空**：無 backspace 鍵可送——先 tap 聚焦、長按叫出編輯選單（選取/全選）、tap 全選後直接打字覆蓋。
+
+## App Store 送審（第一次上架 / 久違送審必讀）
+
+送審前照 `references/asc-release-checklist.md` 走：專案端六項（PrivacyInfo.xcprivacy / 出口合規 / 裝置家族與方向 / build 號 / 圖示 / 付費牆與 IAP 取捨）→ ASC 資料面全用 `appstore-connect` MCP 填（分類、版權聲明、年齡分級、免費價格排程、地區、文案、隱私網址、審核聯絡人）→ 截圖走「MCP reserve → curl PUT 預簽 URL → PATCH md5」→ 送審三步、送出前停下確認。**兩個最常卡的點**：App 隱私標籤答完要按「發布」（API 做不到）；MCP 吞掉 409 明細時用 `.mcp.json` 的 key 自簽 ES256 JWT 直打 API 才看得到 `associatedErrors`。
