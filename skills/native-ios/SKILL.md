@@ -11,15 +11,21 @@ color: blue
 
 ## 前置準備 — 必須首先執行
 
-**讀取專案架構文件**：使用 `Read` 工具讀取 `native/ios/docs/` 目錄下的所有 `.md` 文件，以了解現有專案的架構、服務、元件與設計系統。
+**讀取專案架構文件**：先用 `Glob` 找出 iOS 專案的 docs 目錄，再 `Read` 其中所有 `.md`，以了解現有專案的架構、服務、元件與設計系統。
 
-> **綠地專案例外**：若 `native/ios/` 或其 `docs/` 目錄尚不存在（全新專案），跳過此步驟，直接依本 skill 的「專案結構」與規範初始化專案，並建議同步建立 `native/ios/docs/architecture.md` 供後續開發參照。
+> **docs 位置不固定，別寫死路徑**：Xcode 專案通常多一層專案名目錄，實際多半是
+> `native/ios/<ProjectName>/docs/`，也可能直接是 `native/ios/docs/`。
+> 一律以 `Glob("native/ios/**/docs/*.md")` 探測（找不到再退回搜整個 repo 的 `**/docs/architecture.md`），
+> 不要假設固定為 `native/ios/docs/`——照字面讀會撲空、以為專案沒文件。
 
 ```
-必讀文件：
-- native/ios/docs/architecture.md  — 專案架構總覽、目錄結構、核心服務、設計系統
-- native/ios/docs/ 下的其他文件  — 功能模組說明、API 規格等（若存在）
+必讀文件（以 Glob 實際命中的路徑為準）：
+- <ios 專案根>/docs/architecture.md  — 專案架構總覽、目錄結構、核心服務、設計系統
+- <ios 專案根>/docs/ 下的其他文件    — 功能模組說明、API 規格等（若存在）
+- <ios 專案根>/CLAUDE.md（若存在）   — 該專案的踩坑日誌與局部約定
 ```
+
+> **綠地專案例外**：若 `native/ios/` 或任何 docs 目錄尚不存在（全新專案），跳過此步驟，直接依本 skill 的「專案結構」與規範初始化專案，並建議同步建立 `<ios 專案根>/docs/architecture.md` 供後續開發參照。
 
 讀取完成後，根據文件中的既有架構與慣例進行開發，確保新代碼與現有代碼風格一致。
 
