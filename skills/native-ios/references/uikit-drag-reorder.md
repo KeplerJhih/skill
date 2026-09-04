@@ -89,3 +89,70 @@ SwiftUI view diff 只要 identity 穩定（ForEach id 不變）就保留 UIView 
 抓起成功率（連按十次）、跨多列拖動、兩列邊界緩慢折返、拖曳中背景化再回來。
 模擬器可冒煙的部分：長按浮起（`idb ui tap --duration 2.5` 後台 + 中途截圖）、
 放開復位、捲動恢復。模擬器打不出「長按+拖曳」複合手勢（idb swipe 只有線性插值）。
+
+---
+
+# 整列長按變體（無把手）
+
+> Drop-in 源檔：`examples/LongPressRowReorderList.swift`。
+> 上面那套把 recognizer 掛在 ☰ 把手的透明 view 上。若要**長按列上任何位置**都能抓起
+> （列面積就是把手），透明 view 覆蓋整列會擋掉列本身的點擊與左滑 —— 改掛到**外層 UIScrollView**。
+
+## 為什麼掛祖先而不是列
+
+祖先的 recognizer 收得到整個子樹的 touch，但**不參與 hit-test**，所以：
+
+- 列的 `NavigationLink` / `onTapGesture` / 左滑 `DragGesture` 全部照常運作
+- 長按成立那一刻才由 recognizer 接管
+
+`gestureRecognizerShouldBegin` 用 host view 的 bounds 過濾，讓長按只在列表範圍內成立，
+頁面其他區域（分段控制、別的清單）不受影響。列 index 從 `location(in: host).y / rowHeight` 換算，
+所以**列高必須固定且精確**。
+
+## 坑：`cancelsTouchesInView` 管不到 SwiftUI 手勢
+
+最反直覺的一條。長按成立後放開手指，**列的點擊照樣觸發**（推進了下一頁）。
+`cancelsTouchesInView` 只取消 UIView 的 touch 傳遞，SwiftUI 自己那套 recognizer 不吃這招。
+
+解法是宣告失敗依賴：
+
+```swift
+func gestureRecognizer(_ g: UIGestureRecognizer,
+                       shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+    if let sv = scrollView, other === sv.panGestureRecognizer { return false }
+    return true
+}
+```
+
+其他 recognizer 必須等長按**失敗**才能成立。行為自然分流：
+
+| 使用者意圖 | 長按結果 | 誰接手 |
+|---|---|---|
+| 點一下 | 放手時未達 0.45s → 失敗 | SwiftUI tap |
+| 左滑 | 移動超過 `allowableMovement` → 失敗 | SwiftUI drag（左滑動作列） |
+| 長按拖曳 | 成立 | 本 recognizer |
+| 捲動 | 醞釀期被 pan 搶走，默默 fail | scroll pan（例外，維持即時） |
+
+捲動的 pan 必須排除在依賴之外，否則捲動要等 0.45s 才會動。
+
+## 參數：0.45s / 8pt（比把手版寬鬆）
+
+把手版用 0.35s / 12pt。整列版要跟**左滑**共存，門檻調成 0.45s / 8pt：
+移動判定更早失敗，左滑起手稍慢也不會被長按吃掉。
+
+## 坑：常駐 `.shadow` 讓同列的左滑掉幀
+
+浮起效果若寫成 `.shadow(color: isDragging ? … : .clear, radius: isDragging ? 8 : 0)`，
+即使半徑 0 也會讓每列走離屏渲染。同一列若還支援左滑（offset 每幀變動）就明顯卡。
+改用 `scaleEffect` + `zIndex` 表達浮起即可。
+
+## 與 `.contextMenu` 互斥
+
+兩者都吃長按，0.45s 的 recognizer 會先成立並取消 touch，contextMenu 再也叫不出來。
+用本元件的列，把編輯／刪除改放到左滑動作（見 `references/swipe-action-row.md`）。
+
+## 驗證注意
+
+模擬器打不出「長按＋拖曳」複合手勢，但**可以驗依賴是否正確**：
+`idb ui tap --duration 1.0` 打在列上，若列沒有被推進下一頁 = `shouldBeRequiredToFailBy` 生效。
+拖曳手感、swap 邊界仍須真機。
