@@ -21,7 +21,7 @@
 xcodebuild -scheme <S> -configuration Release -destination 'generic/platform=iOS' -archivePath X.xcarchive archive -allowProvisioningUpdates
 xcodebuild -exportArchive -archivePath X.xcarchive -exportOptionsPlist Export.plist -exportPath out -allowProvisioningUpdates
 ```
-`Export.plist`：`method=app-store-connect`、`destination=upload`、`signingStyle=automatic`、`teamID`、`manageAppVersionAndBuildNumber=false`。**不要帶 `-authenticationKey*`**（團隊 API key 常無雲端 Distribution 簽章權限），靠 Xcode 登入帳號。上傳後 3–10 分鐘 `GET /v1/builds?filter[app]=…&sort=-uploadedDate` 出現 `VALID` 才能綁：`PATCH /v1/appStoreVersions/{v}/relationships/build`。
+`Export.plist`：`method=app-store-connect`、`destination=upload`、`signingStyle=automatic`、`teamID`、`manageAppVersionAndBuildNumber=false`。先帶 `-authenticationKey*` 三參數跑一次，成功即可全自動、不依賴 Xcode 登入；失敗訊息含 `Cloud signing permission error` 代表該金鑰能力不足，再退回 Xcode 登入帳號（帳號 session 過期會報 `Failed to Use Accounts`）。金鑰能不能簽章以實跑結果為準，不以角色名稱判斷。上傳後 3–10 分鐘 `GET /v1/builds?filter[app]=…&sort=-uploadedDate` 出現 `VALID` 才能綁：`PATCH /v1/appStoreVersions/{v}/relationships/build`。
 
 ## 二、ASC 資料面（MCP 可做）
 
