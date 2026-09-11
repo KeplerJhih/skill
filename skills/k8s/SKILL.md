@@ -127,7 +127,24 @@ Consult `references/manifest-templates.md` for complete resource templates.
 
 Every workload must include a SecurityContext. Consult `references/security-checklist.md` for the full checklist.
 
-Minimum required SecurityContext:
+**先判斷 image 能不能以非 root 執行，再選配方。** 把 Profile A 硬套到必須以 root 啟動的 image 上，
+結果是 `CrashLoopBackOff`，不是更安全 — 這是照抄 checklist 最常見的翻車點。
+
+判斷方式（套用前先驗，不要猜）：
+
+```bash
+# 1. image 預設 user 是誰（空字串 = root）
+docker inspect --format '{{.Config.User}}' <image>
+# 2. 直接試跑非 root，起不來就是 Profile B
+docker run --rm -u 65534 <image>
+# 3. 已在叢集上的話，看 log 是否有 Permission denied / bind() failed (13)
+kubectl logs <pod> --previous
+```
+
+#### Profile A — 預設（image 支援非 root）
+
+適用自建應用（Go / Java / Node / Python 等，監聽 >1024 port）與 distroless / scratch base image。
+**新寫的 workload 一律從這裡開始。**
 
 ```yaml
 securityContext:
@@ -138,6 +155,51 @@ securityContext:
   capabilities:
     drop: ["ALL"]
 ```
+
+#### Profile B — image 必須以 root 啟動
+
+適用：官方 `nginx` / `httpd`（master 以 root 啟動、bind :80、寫 pid，worker 自行降權到非 root）、
+需要 bind <1024 port 的服務、部分官方 DB image（entrypoint 以 root 做 chown / initdb）。
+
+保留 root 啟動，改用「唯讀 rootfs + emptyDir 可寫路徑 + 最小 capabilities」收斂風險：
+
+```yaml
+# 官方 nginx 系 image 的實測配方
+securityContext:
+  # 不設 runAsNonRoot — master 需要 root
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+    add: ["CHOWN", "SETGID", "SETUID", "NET_BIND_SERVICE"]
+volumeMounts:
+  - { name: nginx-cache, mountPath: /var/cache/nginx }
+  - { name: nginx-run,   mountPath: /var/run }   # nginx.pid
+  - { name: tmp,         mountPath: /tmp }
+# ---
+volumes:
+  - { name: nginx-cache, emptyDir: {} }
+  - { name: nginx-run,   emptyDir: {} }
+  - { name: tmp,         emptyDir: {} }
+```
+
+保留的 capability 各自為何（不要盲目再加）：
+
+| Capability | 用途 | 拿掉會怎樣 |
+|-----------|------|-----------|
+| `NET_BIND_SERVICE` | bind <1024 port | `bind() to 0.0.0.0:80 failed (13: Permission denied)` |
+| `CHOWN` | master 建 temp 目錄後 chown 給 worker user | worker 無法寫 proxy/client temp |
+| `SETGID` / `SETUID` | master 把 worker 降權到非 root | worker 續以 root 執行或啟動失敗 |
+| `DAC_OVERRIDE` | 繞過檔案權限位 | 多數情況不需要；要加之前先確認真的是它 |
+
+**Namespace PSA 必須配合**：Profile B 過不了 `restricted`（該 profile 強制 `runAsNonRoot: true`）。
+namespace 設 `enforce: baseline` + `warn: restricted`，讓 Profile A 的 workload 仍看得到警示。
+
+#### Profile C — 改造 image 退回 Profile A（長期做法）
+
+把服務改 listen >1024、pid 與 cache 路徑改到可寫位置，即可回到 Profile A。
+nginx 有官方 unprivileged 變體 `nginxinc/nginx-unprivileged`（listen 8080、非 root）。
+有權改 image 或能換 unprivileged 變體時，優先走這條，Profile B 視為過渡。
 
 ### Step 5: Validate
 

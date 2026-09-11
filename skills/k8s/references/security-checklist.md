@@ -8,12 +8,28 @@ Comprehensive security audit checklist for Kubernetes manifests.
 
 ### SecurityContext (Required)
 
+先確認 image 能否以非 root 執行，再挑 profile — 詳見 SKILL.md Step 4。
+把 Profile A 硬套到必須 root 啟動的 image 上，得到的是 `CrashLoopBackOff`，不是安全。
+
+#### Profile A — image 支援非 root（預設，新 workload 一律從這裡開始）
+
 - [ ] `runAsNonRoot: true` — Never run containers as root
 - [ ] `runAsUser: 65534` — Use `nobody` user (or specific non-root UID)
 - [ ] `readOnlyRootFilesystem: true` — Prevent filesystem writes (use `emptyDir` for temp)
 - [ ] `allowPrivilegeEscalation: false` — Prevent privilege escalation
 - [ ] `capabilities.drop: ["ALL"]` — Drop all Linux capabilities
 - [ ] Only add back specific capabilities if required (e.g., `NET_BIND_SERVICE`)
+
+#### Profile B — image 必須以 root 啟動（官方 nginx / httpd、bind <1024、部分 DB image）
+
+- [ ] 已實測確認非 root 跑不起來（`docker run --rm -u 65534 <image>`），不是憑印象假設
+- [ ] `runAsNonRoot` 刻意不設，且 manifest 內有註解寫明原因
+- [ ] `allowPrivilegeEscalation: false` — 仍然必須設
+- [ ] `readOnlyRootFilesystem: true` + emptyDir 掛所有需寫入路徑（nginx：`/var/cache/nginx`、`/var/run`、`/tmp`）
+- [ ] `capabilities.drop: ["ALL"]`，只 add 實際需要的（nginx：`CHOWN`、`SETGID`、`SETUID`、`NET_BIND_SERVICE`）
+- [ ] 每個 add 回來的 capability 都能說出用途，不是整組抄
+- [ ] Namespace PSA 設 `enforce: baseline`（`restricted` 會擋下此 profile），並保留 `warn: restricted`
+- [ ] 有評估過 Profile C（換 unprivileged 變體 / 改 image），Profile B 只作為過渡
 
 ### Pod-Level Security
 

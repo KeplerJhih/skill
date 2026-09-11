@@ -73,6 +73,8 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # Profile A：適用能以非 root 執行的 image。官方 nginx / httpd、需 bind <1024
+          # 或 entrypoint 以 root 做 chown 的 image 照抄會 CrashLoop — 改用 SKILL.md Step 4 的 Profile B。
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
