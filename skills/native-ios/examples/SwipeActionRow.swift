@@ -20,6 +20,9 @@ import UIKit
 //
 // 多列協調（同時只開一列、捲動即收合）：容器建一個 SwipeRowCoordinator 放進 environment，
 // 並在 ScrollView 掛 .onScrollPhaseChange，見檔案末尾。
+//
+// 手勢層依賴同目錄 `HorizontalPanGesture.swift`（iOS 18+ UIKit pan：只在水平為主時 begin，垂直手勢
+// 完全讓給 ScrollView / sheet 下拉收合；17 退 SwiftUI DragGesture）。
 
 struct SwipeActionRow<Content: View>: View {
     // 動作文案（呼叫端負責在地化；元件本身不依賴 loc）
@@ -80,7 +83,18 @@ struct SwipeActionRow<Content: View>: View {
             // .offset 是 geometry effect，layout frame 不動 → 下面的 background 停在原位，
             // content 滑開自然露出，z 序也天然在 content 之下（免 ZStack + GeometryReader 量高）。
             .offset(x: offset)
-            .simultaneousGesture(dragGesture)
+            .modifier(HorizontalPanBridge(
+                minimumDistance: 18,
+                onBegan: { beginHorizontal() },
+                onChanged: { dx, dy in
+                    if dragLock == .undecided { legacyDecideAxis(dx: dx, dy: dy) }   // 17 路徑才會進來
+                    panChanged(dx: dx)
+                },
+                onEnded: { _, predictedExtra in panEnded(predictedExtra: predictedExtra) }
+            ))
+            // 已開的列碰到垂直捲動 → 收合（對齊系統 List）。UIKit 路徑下垂直手勢不會進本元件，
+            // 另掛一個只在「已開」時才生效的旁聽 drag；不收的話開著的列手勢狀態會卡住後續下拉。
+            .simultaneousGesture(closeOnVerticalScroll, including: isOpen ? .all : .none)
             .onTapGesture { isOpen ? close() : onTapContent?() }
             .background(alignment: .trailing) {
                 if shouldReveal {
@@ -116,72 +130,81 @@ struct SwipeActionRow<Content: View>: View {
             }
     }
 
-    /// 門檻 18pt：**不可低於 UIScrollView pan 的啟動閾值（~10pt）**，否則垂直 touch 也被本手勢
-    /// 圈住，ScrollView 收不到 → sheet 的系統下拉收合（靠 scroll pan 鏈路）整個失效。
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 18)
-            .onChanged { value in
-                let dx = value.translation.width
-                let dy = value.translation.height
-                // 第一幀決定方向：明顯水平才接手，否則釋放給 ScrollView。之後不再重算，
-                // 避免手指途中垂直偏移被當取消。
-                if dragLock == .undecided {
-                    if abs(dx) > abs(dy) * 2.2 {
-                        dragLock = .horizontal
-                        coordinator?.draggingRowID = rowID
-                        if !isOpen { coordinator?.openRowID = nil }   // 開新列＝先收掉別列
-                    } else {
-                        dragLock = .releasedToScroll
-                        if dragOffset != 0 { dragOffset = 0 }
-                        // 垂直拖 = 捲動意圖 → 順手收合（對齊系統 List）。不收的話開著的 row
-                        // 手勢狀態會卡住後續下拉，sheet 拖不動。
-                        if isOpen { withAnimation(spring) { isOpen = false } }
-                        return
-                    }
-                }
-                if dragLock == .releasedToScroll { return }
-                dragOffset = isOpen ? min(dx, revealWidth)    // 往右最多收到 0；往左可繼續拉深
-                                    : (dx < 0 ? dx : 0)       // 只接左滑；允許一路拉到底
-                let nowArmed = -offset > fullSwipeThreshold
-                if nowArmed != fullSwipeArmed {
-                    fullSwipeArmed = nowArmed
-                    UIImpactFeedbackGenerator(style: nowArmed ? .medium : .light).impactOccurred()
+    // MARK: 手勢核心（iOS 18+ UIKit pan / iOS 17 SwiftUI DragGesture 共用同一套狀態機）
+    //
+    // 為什麼換 UIKit：SwiftUI DragGesture 在 ScrollView 內由 SwiftUI 分配所有權，起手橫向分量 ≳ 0.9 倍垂直
+    // 就把整條手勢判給列，**被判走的下拉手勢不會回到 ScrollView / sheet 收合**——整頁都是列的 sheet
+    // 「下拉很常收不了」。UIKit pan 只在水平為主時 begin，垂直手勢本元件根本不參與。
+    // 17 舊路徑門檻 18pt：不可低於 UIScrollView pan 啟動閾值 ~10pt（曾降到 12pt 讓 sheet 下拉整條失效）。
+
+    private func beginHorizontal() {
+        dragLock = .horizontal
+        coordinator?.draggingRowID = rowID
+        if !isOpen { coordinator?.openRowID = nil }   // 開新列＝先收掉別列
+    }
+
+    /// 17 舊路徑第一幀決定方向（水平為主才接手；否則釋放給 ScrollView 並收合開著的列）。
+    private func legacyDecideAxis(dx: CGFloat, dy: CGFloat) {
+        if abs(dx) > abs(dy) {
+            beginHorizontal()
+        } else {
+            dragLock = .releasedToScroll
+            if dragOffset != 0 { dragOffset = 0 }
+            if isOpen { withAnimation(spring) { isOpen = false } }
+        }
+    }
+
+    private var closeOnVerticalScroll: some Gesture {
+        DragGesture(minimumDistance: 18).onChanged { v in
+            if abs(v.translation.height) > abs(v.translation.width), isOpen, dragLock != .horizontal { close() }
+        }
+    }
+
+    private func panChanged(dx: CGFloat) {
+        guard dragLock == .horizontal else { return }
+        dragOffset = isOpen ? min(dx, revealWidth)    // 往右最多收到 0；往左可繼續拉深
+                            : (dx < 0 ? dx : 0)       // 只接左滑；允許一路拉到底
+        let nowArmed = -offset > fullSwipeThreshold
+        if nowArmed != fullSwipeArmed {
+            fullSwipeArmed = nowArmed
+            UIImpactFeedbackGenerator(style: nowArmed ? .medium : .light).impactOccurred()
+        }
+    }
+
+    /// - predictedExtra：鬆手後預期還會再滑的距離（SwiftUI = predictedEndTranslation − translation；
+    ///   UIKit = 速度 × 0.12s 近似），flick 判定門檻 220。
+    private func panEnded(predictedExtra: CGFloat) {
+        defer {
+            dragLock = .undecided
+            coordinator?.draggingRowID = nil
+        }
+        guard dragLock == .horizontal else {
+            withAnimation(spring) { dragOffset = 0 }
+            return
+        }
+        if fullSwipeArmed {                           // 拉到底鬆手：收合並直接執行
+            fullSwipeArmed = false
+            withAnimation(spring) { isOpen = false; dragOffset = 0 }
+            triggerDelete()
+            return
+        }
+        let velocity = predictedExtra
+        let current = offset
+        withAnimation(spring) {
+            if isOpen {
+                let closeByDistance = current > -revealWidth * 0.4
+                let closeByFlick = velocity > 220 && current > -revealWidth * 0.8
+                if closeByDistance || closeByFlick { isOpen = false }
+            } else {
+                let openByDistance = current < -revealWidth * 0.6
+                let openByFlick = velocity < -220 && current < -capsuleWidth * 0.4
+                if openByDistance || openByFlick {
+                    isOpen = true
+                    coordinator?.openRowID = rowID
                 }
             }
-            .onEnded { value in
-                defer {
-                    dragLock = .undecided
-                    coordinator?.draggingRowID = nil
-                }
-                guard dragLock == .horizontal else {
-                    withAnimation(spring) { dragOffset = 0 }
-                    return
-                }
-                if fullSwipeArmed {                           // 拉到底鬆手：收合並直接執行
-                    fullSwipeArmed = false
-                    withAnimation(spring) { isOpen = false; dragOffset = 0 }
-                    triggerDelete()
-                    return
-                }
-                // 用 predictedEndTranslation 取速度：慢速拖到一半不開，快速輕彈就開。
-                let velocity = value.predictedEndTranslation.width - value.translation.width
-                let current = offset
-                withAnimation(spring) {
-                    if isOpen {
-                        let closeByDistance = current > -revealWidth * 0.4
-                        let closeByFlick = velocity > 220 && current > -revealWidth * 0.8
-                        if closeByDistance || closeByFlick { isOpen = false }
-                    } else {
-                        let openByDistance = current < -revealWidth * 0.6
-                        let openByFlick = velocity < -220 && current < -capsuleWidth * 0.4
-                        if openByDistance || openByFlick {
-                            isOpen = true
-                            coordinator?.openRowID = rowID
-                        }
-                    }
-                    dragOffset = 0
-                }
-            }
+            dragOffset = 0
+        }
     }
 
     private func triggerDelete() {

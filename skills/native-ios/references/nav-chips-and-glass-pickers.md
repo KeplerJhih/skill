@@ -31,6 +31,8 @@
 2. **Menu label 放自製 chip 而 Menu 沒加 `.buttonStyle(.plain)`**：真機 iOS 26 用系統玻璃圓底把 chip **再包一層**（雙圓／放大的米黃圓）。
 3. **原生 toolbar 放自製 chip**：toolbar 按鈕自帶玻璃圓底，同樣雙圓疊套。解法 `sharedBackgroundVisibility(.hidden)`；或退而求其次 toolbar 內放裸 icon 讓系統圓底呈現（但與自訂 header 的 chip 不同材質，能用 hidden 就用 hidden）。
 
+更多 iOS 26 玻璃踩坑（rim 關不掉、巢狀玻璃黑邊、鏡片染色、morph 不能拖、三層材質分工）見 `liquid-glass-ios26.md`。
+
 **鐵律：模擬器對系統玻璃的渲染極弱、與真機不一致**——坑 #2 在模擬器上幾乎看不出來，真機一眼爆。**凡涉及 Menu/toolbar + 自製元件的改動，必須真機驗證後才算完成。**
 
 ## 相關慣例（同場加映）

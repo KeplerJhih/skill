@@ -22,26 +22,32 @@ content
 3. **零常駐成本**。`if shouldReveal` 條件建構，按鈕子樹只在開始滑動時才 build。
    用 `opacity(0)` 隱藏的版本會讓 N 列 × 2~3 顆按鈕全部白建。
 
-## 坑 1：`minimumDistance` 不能低於 UIScrollView pan 的閾值
+## 手勢所有權：橫向手勢一律走 UIKit pan 橋接（取代坑 1、坑 2）
 
-pan 大約 10pt 啟動。曾把門檻降到 12pt 想讓水平起手更跟手，結果**垂直** touch 也被本手勢
-圈住，ScrollView 收不到 → sheet 的系統下拉收合（走 scroll pan 鏈路）整個失效，真機才發現。
+**根因**：SwiftUI `DragGesture` 放在 ScrollView 內時，由 SwiftUI 在起手約 10pt 依方向分配所有權——
+橫向分量只要 ≳ 0.9 倍垂直，整條手勢就判給列；**被判走的手勢不會回到 ScrollView，也到不了 sheet 的
+下拉收合**。兩個實際症狀：
 
-**18pt** 是實測的甜蜜點：垂直拖曳在死區內先被 scroll pan 認領，水平又比 28pt 靈敏。
+1. 列自己的判定若比 SwiftUI 嚴（舊寫法 `|dx| > 2.2·|dy|` 才鎖橫向），42°–66° 的斜向手勢落入死區：
+   SwiftUI 已判給列、列又嫌不夠橫而放掉 → 既不捲也不開，拇指斜著滑長清單「很難滑」
+   （模擬器實測同角度在無列的標題上捲 20pt、在列上捲 0pt）。
+2. 就算列的判定對齊到 `|dx| > |dy|`，起手偏橫一點的下拉仍被列吃掉 → 整頁都是列的 sheet
+   （備忘錄 / 歷史）往下拉「很常收不了」。
 
-## 坑 2：方向判定只在第一幀做，之後不准重算
+**正解**：`examples/HorizontalPanGesture.swift`（iOS 18 `UIGestureRecognizerRepresentable`）——
+`gestureRecognizerShouldBegin` 只在水平為主時 begin，垂直手勢本元件根本不參與；與 UIScrollView pan
+不並存並要求它等本 pan 失敗（`shouldBeRequiredToFailBy`），仲裁順序確定。`HorizontalPanBridge` 在
+17 退回 SwiftUI DragGesture（18pt 門檻——不可低於 UIScrollView pan ~10pt，曾降到 12pt 讓 sheet 下拉整條失效）。
+改後：45° 與偏直斜滑都會捲、左滑開鈕 / full swipe 正常、sheet 從列上下拉可收。
 
-```swift
-if dragLock == .undecided {
-    if abs(dx) > abs(dy) * 2.2 { dragLock = .horizontal }
-    else { dragLock = .releasedToScroll; /* 順手收合 */ return }
-}
-```
+兩個連帶：
+- **已開的列要在垂直捲動時收合**（對齊系統 List）。UIKit 路徑下垂直手勢不進元件，改掛一個只在
+  `isOpen` 時才生效的旁聽 `simultaneousGesture`（`including: isOpen ? .all : .none`）。
+- UIKit 的 translation 不含起手 ~10pt 滯後：真機連續取樣差異可忽略；模擬器 10pt 步進會少 10–20pt，
+  測 full swipe 要多拉一點。
 
-每幀重算的話，使用者拉開後手指自然往下飄（滑到隔壁列的高度）就被判成垂直、整列回彈。
-`2.2` 倍是「明顯水平」的門檻，比 1.0 更能把斜向起手讓給捲動。
-
-垂直分支要**順手收合已開的列**：不收的話，開著的 row 手勢狀態會卡住後續下拉，sheet 拖不動。
+**通則**：任何自訂橫向手勢（左滑列、可拖曳的 pill 選擇器…）一律套這個橋接；不要再用 SwiftUI
+DragGesture 猜 SwiftUI 的所有權邊界。方向判定只在 begin 時做一次，之後不重算（每幀重算會因手指下飄而誤判回彈）。
 
 ## 坑 3：`.buttonStyle(.plain)` 不可省（iOS 26）
 
@@ -102,6 +108,7 @@ ScrollView { … }
 
 ## 驗證注意
 
-**模擬器的合成左滑（`idb ui_swipe`）驅動不了 SwiftUI 的 `DragGesture`**，
-不論 duration 0.25~1.2s、delta 2~4，一律被當成點擊。左滑行為只能真機驗；
-模擬器能驗的只有點擊導航、選單、彈窗與垂直捲動（走 UIScrollView 原生 pan，不受影響）。
+模擬器 `idb ui swipe` **驅動得了** UIKit pan 與 SwiftUI DragGesture（18pt 門檻可開列、可拉深觸發 full swipe），
+也驅動得了 sheet 的系統下拉收合（從 ScrollView 內容區往下拉）——先前「合成左滑一律被當點擊」「拉不動 sheet」
+的紀錄分別是舊 28pt 門檻與全域關橫向回彈（見 `scroll-bounce-and-width.md`）造成的誤判。驗法：固定角度 swipe 前後
+比對 AX 元素 y（捲動量）／截圖看按鈕；震動與拉長的體感、玻璃渲染仍要真機。
