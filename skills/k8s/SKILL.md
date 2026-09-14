@@ -15,6 +15,9 @@ description: >-
   "switch kubeconfig", "set KUBECONFIG", "kubectl config use-context", "連線叢集", "切換叢集",
   "kubeconfig 管理" — in which case follow Step 0 (Cluster Connection / Kubeconfig) and use the
   `switch` (kubeswitch) tool before running any live-cluster command.
+  For Argo CD notifications, consult references/argocd-notifications.md first: "ArgoCD",
+  "argocd-notifications-cm", "notifications.argoproj.io/subscribe", "oncePer", "argocd app rollback",
+  "部署通知", "rollback 通知", "Discord 通知", "webhook 通知".
 version: 0.1.0
 ---
 
@@ -312,6 +315,7 @@ metadata:
 - **Pod topology & HA** — Use `topologySpreadConstraints` to spread replicas across nodes/zones. `minReplicas: 2` + PDB alone is only *half* HA — replicas can still co-locate on one node, so a single node failure takes the service to zero. Soft (`ScheduleAnyway`) reliably spreads across nodes but NOT across AZs; use hard (`DoNotSchedule`) on the zone key for guaranteed AZ HA. See `references/hpa-ha-pitfalls.md`.
 - **HPA correctness (mesh-aware)** — With an injected sidecar, scale on `type: ContainerResource` targeting the app container, not `Resource` (whole-pod utilization is diluted by the sidecar's request → HPA scales up late). Do not use memory as a scale signal for Go/JVM services (heap is not returned to the OS → replicas pin high and never scale down); keep memory as an OOM `limit` instead. See `references/hpa-ha-pitfalls.md`.
 - **Confirm the target cluster first** — Never touch a live cluster without selecting it via `switch` and confirming the printed context/server/namespace (Step 0). No ad-hoc `export KUBECONFIG`.
+- **GitOps-managed resources** — When Argo CD manages a workload, change it through git (commit / `git revert`), not `kubectl set image` / `kubectl rollout undo`: those bypass sync, fire no notification, and are reverted by selfHeal. For deploy / rollback notifications, see `references/argocd-notifications.md`.
 
 ---
 
@@ -325,3 +329,4 @@ For detailed templates and checklists, consult:
 - **`references/resource-sizing.md`** — Resource requests/limits sizing guide by workload type and cloud provider recommendations
 - **`references/helm-patterns.md`** — Helm chart patterns, helpers, and values structure conventions
 - **`references/hpa-ha-pitfalls.md`** — HPA correctness (`ContainerResource` vs `Resource` with sidecars, memory-metric caveat) and HA spread (`topologySpreadConstraints` soft vs hard, node vs AZ); read before enabling HPA or claiming a workload is HA
+- **`references/argocd-notifications.md`** — Argo CD Notifications: secret reference rules (`$key` vs `$name:key`), subscription scopes (Application / AppProject / global `subscriptions`; never on Deployment), `oncePer` field choice and non-expiring dedup state that silently drop rollback notifications, failure triggers, commit message / author / initiator template with `toJson`, a verified Discord ConfigMap, and in-pod CLI troubleshooting
