@@ -37,9 +37,21 @@ ScrollView {
 
 配合字級 × 螢幕寬的既有防線：`lineLimit(1) + minimumScaleFactor`、`layoutPriority` 分誰先縮、死寬度乘字級倍率。
 
+## 規則四：page TabView 會把每頁裁在安全區內（底部 Tab 列上緣硬切成色塊）
+
+`.tabViewStyle(.page)` 底層是 `UIPageViewController`，每一頁的 hosting view 被裁在安全區內。頁面本身有底部 Tab 列（經典 TabView）時，內頁 ScrollView 捲到 Tab 列上緣就被硬切，Tab 列後面只剩背景底色，看起來像一塊色塊蓋在內容上（真機實訴；同一頁以 sheet 呈現時沒有 Tab 列所以看不出來）。
+
+```swift
+TabView(selection: $tab) { … }
+    .tabViewStyle(.page(indexDisplayMode: .never))
+    .ignoresSafeArea(.container, edges: .bottom)   // 讓每頁延伸到底，內容捲進玻璃 Tab 列底下
+```
+
+各頁內的 ScrollView 仍拿得到底部安全區 inset（捲到底最後一列不會被 Tab 列蓋住），所以只加這一行、不用動內容 padding。
+
 ## 量測工法（模擬器）
 
 - **找超寬元素**：`idb ui describe-all --json` 走訪所有 AX 元素，列出 `x + width > 螢幕寬` 的項目（排除 Application 根與 x ≥ 螢幕寬的離屏抽屜）。
 - **橫拖是否真的動**：記一個 AX 標籤的 `x`，`idb ui swipe` 橫向拖一段，再讀一次比對；回彈會彈回，所以要在 swipe 結束後 0.3s 內截圖才看得到拉開的瞬間。
-- **字級**：`defaults write <bundle> orua.fontScale` 類的 UserDefaults 改字級在 cfprefsd 快取下常不生效，改字級要在 app 內點；用 AX 找到字級 pill（label 形如「Aa、特大」）再 tap。
+- **字級 / 任何 UserDefaults 預埋**：`simctl spawn <udid> defaults write <bundle> …` 寫的是模擬器根層那份 plist，app 讀的是 app 容器內 `Library/Preferences/<bundle>.plist`，而且 cfprefsd 快取會把舊值回寫蓋掉——所以「常不生效」。正解：`simctl terminate` → `simctl spawn <udid> launchctl kill TERM system/com.apple.cfprefsd.xpc.daemon`（讓它先 flush）→ `plutil -replace "<key>" -string <value> <容器 plist>`（鍵名含點要跳脫）→ `simctl launch`。首裝哨兵、字級、介面模式都走這條；只是臨時改字級也可以在 app 內點（AX label 形如「Aa、特大」）。
 - **idb 合成手勢能做什麼**：能驅動 sheet 的系統下拉收合（從 ScrollView 內容區往下拉）、能驅動 UIKit `UIPanGestureRecognizer`、能驅動 SwiftUI `DragGesture`（18pt 門檻可開列、可拉深）。先前「idb 拉不動 sheet」的紀錄是被全域回彈設定（規則二）誤導，已翻案。做不到的：`UIScreenEdgePanGestureRecognizer` 邊緣手勢、長按後原地不動再拖的 lift。

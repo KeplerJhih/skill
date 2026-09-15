@@ -19,14 +19,21 @@ import UIKit
 // 用法（iOS 18+；17 用下方 HorizontalPanBridge 自動退回 DragGesture）：
 //   content.gesture(HorizontalPanGesture(
 //       onBegan: { … },
+//       shouldBegin: { dx in canShift(dx < 0 ? 1 : -1) },   // 選填:該方向到底就不接手 → 手勢原封給外層 pager
 //       onChanged: { dx, dy, location in … },
 //       onEnded: { dx, predictedExtra in … }))
+//
+// `shouldBegin`:水平為主之外的額外 begin 條件（參數 = 起手 dx，正 = 往右）。回 false 本 pan 不 begin，
+// 觸摸交給下一個辨識器——放在 page TabView 裡的月曆 / 輪播用它做「翻得了就翻，翻不了就切 tab」：
+// 沒這個鉤子，元件在邊界會吃掉手勢卻沒反應（SwiftUI DragGesture 做不到「判斷後退回」，UIKit 才有）。
 //
 // 注意：UIKit 的 translation 不含起手 ~10pt 滯後（真機連續取樣差異可忽略；模擬器 10pt 步進會少 10–20pt）。
 
 @available(iOS 18.0, *)
 struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
     var onBegan: () -> Void = {}
+    /// 水平為主之外的額外 begin 條件（參數 = 起手 dx）；回 false 不接手、手勢交給外層。nil = 只看方向。
+    var shouldBegin: ((CGFloat) -> Bool)? = nil
     /// (translationX, translationY, 目前觸點在本 view 座標的位置)
     var onChanged: (CGFloat, CGFloat, CGPoint) -> Void
     /// (translationX, 鬆手後預期再滑距離 pt ≈ velocityX × 0.12s；與 SwiftUI predictedEndTranslation − translation 同量級)
@@ -36,10 +43,15 @@ struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
         let pan = UIPanGestureRecognizer()
+        context.coordinator.shouldBegin = shouldBegin
         pan.delegate = context.coordinator
         pan.cancelsTouchesInView = true
         pan.maximumNumberOfTouches = 1
         return pan
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        context.coordinator.shouldBegin = shouldBegin   // closure 會隨 view 重建更新（捕捉最新的 canShift 狀態）
     }
 
     func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
@@ -60,6 +72,8 @@ struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var shouldBegin: ((CGFloat) -> Bool)?
+
         // velocity≈0 fallback：極慢起手 velocity 偶為 0，改用 translation 判主軸。
         func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
             guard let p = g as? UIPanGestureRecognizer, let view = p.view else { return false }
@@ -67,7 +81,8 @@ struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
             let useVelocity = abs(v.x) + abs(v.y) > 1
             let dx = useVelocity ? v.x : p.translation(in: view).x
             let dy = useVelocity ? v.y : p.translation(in: view).y
-            return abs(dx) > abs(dy)
+            guard abs(dx) > abs(dy) else { return false }
+            return shouldBegin?(dx) ?? true
         }
 
         func gestureRecognizer(_ g: UIGestureRecognizer,

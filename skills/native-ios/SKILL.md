@@ -158,11 +158,13 @@ color: blue
 - **收鍵盤 & 可編輯輸入框**：新表單一律沿用 `examples/KeyboardDismissDome.swift` / `View+KeyboardDismiss.swift` / `EditableFieldStyle.swift`，勿手刻；安裝與踩坑見 `references/keyboard-and-input-patterns.md`。
 - **形體與材質（iOS 26 Liquid Glass）**：圓角只用 `Radius` 五檔 + 膠囊、全部 continuous；**玻璃只給導航層**（角落鈕 / pill 殼外的浮動 bar / 鍵盤拉柄），內容層實色、浮層材質，`#available(iOS 26)` 集中在 `examples/Surface.swift` 一檔。真機踩坑（rim 關不掉、巢狀玻璃粗黑邊、鏡片染色像色塊、glass 放 background 模擬器蓋字但真機正常、`glassEffectID` 只能點不能拖）與 Tab bar 式可拖曳鏡片選擇器 `examples/GlassPillPicker.swift`，見 `references/liquid-glass-ios26.md`。
 - **角落導航鈕 & 下拉選擇控件**：統一 `CircleNavChip`/`CircleNavButton`（34 圓框零特例）與 `.selectorGlass()`，drop-in 在 `examples/CircleNavButton.swift` / `SelectorGlass.swift`；iOS 26 三坑（Menu 必配 `.plain`、toolbar 必配 `sharedBackgroundVisibility(.hidden)`、模擬器對玻璃渲染不可信）見 `references/nav-chips-and-glass-pickers.md`。
-- **橫向手勢一律 UIKit pan 橋接**：SwiftUI `DragGesture` 在 ScrollView 內由 SwiftUI 分配所有權（起手橫向 ≳ 0.9 倍垂直即判給元件），**被判走的下拉不會回到 ScrollView / sheet 收合**——整頁都是列的 sheet 下拉常收不了、斜向捲動卡住同根。左滑列、可拖曳 pill 等任何自訂橫向手勢一律套 `examples/HorizontalPanGesture.swift`（iOS 18，只在水平為主時 begin；17 退 DragGesture），推導見 `references/swipe-action-row.md`「手勢所有權」。
+- **橫向手勢一律 UIKit pan 橋接**：SwiftUI `DragGesture` 在 ScrollView 內由 SwiftUI 分配所有權（起手橫向 ≳ 0.9 倍垂直即判給元件），**被判走的下拉不會回到 ScrollView / sheet 收合**——整頁都是列的 sheet 下拉常收不了、斜向捲動卡住同根。左滑列、可拖曳 pill 等任何自訂橫向手勢一律套 `examples/HorizontalPanGesture.swift`（iOS 18，只在水平為主時 begin；17 退 DragGesture；`shouldBegin(dx)` 鉤子讓「該方向到底」時不接手、手勢原封交給外層 pager 切頁），推導見 `references/swipe-action-row.md`「手勢所有權」。
 - **ScrollView 內的左滑動作列**：`List` 之外自繪列用不了 `.swipeActions`；drop-in `examples/SwipeActionRow.swift`（已走 UIKit pan 橋接）。要點：動作鈕掛 `background(alignment:)` 免量高、iOS 26 動作鈕必配 `.buttonStyle(.plain)`、常駐 `.shadow` 掉幀、收合淡出期間 ghost tap 要 `guard isOpen`、多列「捲動即收合」靠容器協調者，見 `references/swipe-action-row.md`。
 - **縱向 ScrollView 的橫向回彈**：iOS 26 內容貼齊寬度仍可被左右拉開 → 每個縱向 ScrollView 掛 `.scrollBounceBehavior(.basedOnSize, axes: .horizontal)`；**嚴禁** `UIScrollView.appearance().bouncesHorizontally = false`（殺掉 sheet 下拉收合）；內容略寬臨界用 `containerRelativeFrame(.horizontal) + clipped()` 最後防線，見 `references/scroll-bounce-and-width.md`。
 - **Threads 式 reveal 側選單**：必讀 `references/threads-reveal-drawer.md`（架構定案、UIKit edge pan 開 + cancelsTouchesInView 收、不過衝 spring、10 條踩坑）；最凶一條：模擬器對「offset 平移含 UIKit 容器的大樹」渲染不可信，視覺一律真機。
 - **ScrollView 內 tap 列的捲動誤觸防線**：任何非表單頁的 ScrollView 內 Button / onTapGesture 列，內容一律掛 `examples/ScrollTapGuard.swift` 的 `restoreTouchDelays()`（恢復觸摸延遲 + UIKit 垂直 pan 取消守衛），**必掛 ScrollView 的內容而非 ScrollView 本身**，邊界見 `references/scroll-tap-guard.md`。
+- **body 內重複讀的重計算改成索引**：`Dictionary(grouping:)`、排序、分桶這類 O(n log n) 的 computed property 若在 body 裡被讀多次（建字典一次、兩顆箭頭各讀一次 `first`…），每次重繪就重跑多遍，翻頁動畫期間每幀都算。改 `@State` 存索引 + `.onChange(of: 資料, initial: true) { 重建 }`，view 只查表；索引跟資料走，不跟 locale 走（分桶用 timezone），語系切換不必重建。
+- **page TabView 裁安全區**：`.tabViewStyle(.page)` 的每頁被裁在安全區內，底部有 Tab 列時內容在 Tab 列上緣被硬切成色塊；TabView 掛 `.ignoresSafeArea(.container, edges: .bottom)`，內層 ScrollView 仍保有底部 inset，見 `references/scroll-bounce-and-width.md` 規則四。
 - **長按拖曳排序**：SwiftUI `LongPress+Drag` 有修不掉的抖動源，一律改 UIKit `UILongPressGestureRecognizer` 橋接——把手版 `examples/ReorderableDragList.swift`、整列版 `examples/LongPressRowReorderList.swift`（recognizer 掛外層 UIScrollView + `shouldBeRequiredToFailBy`），推導見 `references/uikit-drag-reorder.md`。
 
 ### 6. 錯誤處理
@@ -261,7 +263,9 @@ struct ExampleView: View {
 4. **文字欄清空**：無 backspace 鍵可送——先 tap 聚焦、長按叫出編輯選單（選取/全選）、tap 全選後直接打字覆蓋。
 5. **合成手勢能做什麼**：`idb ui swipe` 驅動得了 SwiftUI `DragGesture`（18pt 門檻可開列、拉深）、UIKit `UIPanGestureRecognizer`、sheet 的系統下拉收合（從 ScrollView 內容區往下拉）；做不到邊緣手勢與「長按停住再拖」的 lift。若 sheet 拉不動，先懷疑全域回彈設定（見 `references/scroll-bounce-and-width.md`），不是 idb。
 6. **量測工法**：AX dump（`idb ui describe-all --json`）比對固定標籤的 y 得捲動量、列出 `x+width > 螢幕寬` 找超寬元素；固定角度 swipe 可量手勢仲裁邊界。
-7. **字級**：`defaults write` 改字級鍵在 cfprefsd 快取下常不生效，要在 app 內點（AX label 形如「Aa、特大」）；`orua.onboarded` 類首裝哨兵則要在首次啟動**前**寫。
+7. **預埋 UserDefaults（字級 / 首裝哨兵 / 介面模式）**：`simctl spawn defaults write` 寫的是根層 plist，app 讀的是容器內那份，cfprefsd 還會回寫蓋掉 → 正解是 terminate → `launchctl kill TERM system/com.apple.cfprefsd.xpc.daemon` → `plutil` 直改容器 `Library/Preferences/<bundle>.plist` → launch（細節見 `references/scroll-bounce-and-width.md` 量測工法）。首裝哨兵一律在首次啟動**前**寫。
+8. **AX dump 含被蓋住的常駐層**：always-mounted 的抽屜 / reveal 選單即使關著，列也在 `describe-all` 樹裡（frame 常是 x=0、寬固定），依 label 找元素會點到它們。先用 frame 過濾（排除該固定寬度或 `x+width` 超出畫面的節點）再匹配 label；同一份 dump 也能用 label **子字串**找列（AX label 常是「N°01、標題、副標」串接）。
+9. **錄影（`simctl io recordVideo`）**：靜止畫面不產幀，而且靜止後下一段動畫開頭約 0.15 s 被丟掉，成片像跳接。解法：DEBUG build 加一個左上角 2×2 pt 每幀微變色的心跳 view（環境變數開關、Release 不編譯），framebuffer 永遠有變化 encoder 就不省幀；副作用是片尾靜止也照錄。錄影像素尺寸與 `simctl io screenshot` 同（Pro 1206×2622、Pro Max 1320×2868），動態島在錄影裡比截圖寬幾 px（編碼暈開），補平 patch 要多留邊。
 
 ## App Store 送審（第一次上架 / 久違送審必讀）
 

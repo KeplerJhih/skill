@@ -75,3 +75,11 @@ JWT="$H.$P.$SIG"
 curl -s -X POST https://api.appstoreconnect.apple.com/v1/reviewSubmissionItems -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' -d '…' | python3 -m json.tool
 ```
 （DER→raw r‖s 的 python 是必要的，openssl 輸出的是 DER，JWT 要 64 bytes raw。）
+
+## 六、二次送審 / 換 build / 換預覽（版本已建過才會遇到）
+
+- **`reviewSubmissions` 的狀態語意**：`READY_FOR_REVIEW` 且 `submittedDate: null` = 只按過「準備送審」的**草稿**，Apple 還沒收到；`PATCH canceled: true` 回 409「Resource is not in cancellable state」是正常的，不用撤。真的送出後才是 `WAITING_FOR_REVIEW`（可撤）。
+- **版本掛在草稿裡就被鎖**：此時 `DELETE /v1/appPreviews/{id}` 回 409「Can't Delete Preview while Ready For Review」、換 build 也可能失敗。解法：`GET /v1/reviewSubmissions/{id}/items` 拿 item id → `DELETE /v1/reviewSubmissionItems/{itemId}`（版本回 `PREPARE_FOR_SUBMISSION`）→ 改預覽 / `PATCH /v1/appStoreVersions/{id}/relationships/build` 換 build → 再 `POST reviewSubmissionItems` 掛回同一份草稿 → `PATCH submitted: true`。
+- **換 build 的順序**：先 `xcodebuild -exportArchive`（`ExportOptions.plist` 的 `destination: upload` + `-authenticationKeyPath/-KeyID/-KeyIssuerID`）上傳，再輪詢 `GET /v1/builds?filter[app]=…&filter[preReleaseVersion.version]=X.Y&fields[builds]=version,processingState` 到該 build 號 `VALID`（約 5–10 分鐘），才能掛到版本。
+- **預覽分段上傳別經 MCP 轉抄**：一支 37 MB 的預覽有 8 個 presigned URL、六筆預約就超過 MCP 回傳截斷上限（約 40k chars），抄回本機必錯。用純 stdlib + openssl 的小客戶端在本機直打（第五段的 JWT 改寫成 python：`openssl dgst -sha256 -sign` 出 DER → 自己拆 r‖s → base64url），流程 `GET /v1/appPreviews/{id}` 取 `uploadOperations` → 依 offset 分段 PUT → `PATCH uploaded:true + sourceFileChecksum(md5)` → 輪詢 `assetDeliveryState.state == COMPLETE` → 需要時 `PATCH previewFrameTimeCode`（封面幀，格式 `HH:MM:SS:FF`）。
+- **App Store 規格檔很大**：H.264 固定 10 Mbps 的 30 秒預覽約 37 MB，超過對話附件上限（30 MiB）；給人審閱先轉一份 CRF 24 的輕量版，原檔留給 ASC。
