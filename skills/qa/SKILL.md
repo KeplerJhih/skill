@@ -87,3 +87,4 @@ color: orange
 -   **Console 檢查**：每次測試結束前，用 `list_console_messages` 確認無未預期的錯誤。
 -   **清理環境**：測試結束後使用 `close_page` 關閉頁面。
 -   **截圖佐證**：關鍵步驟或錯誤發生時，使用 `take_screenshot` 截圖並存至 `tmp/` 目錄。
+-   **上傳測試檔**：瀏覽器工具的上傳可能只允許本工作階段可讀的檔案。遇到限制時，把測試檔複製到專案內被 git 忽略、且開發伺服器會提供的目錄（例如前端的 `tmp/`），在頁面內 `fetch` 取得後以 `DataTransfer` 放進 `<input type="file">` 並觸發 `change`；測試完刪除該檔。

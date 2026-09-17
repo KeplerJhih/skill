@@ -52,6 +52,7 @@ frontend/main/src/
 - **防止跑版**：
   - 長文字區塊務必加上 `break-words` 或 `truncate`。
   - 圖片使用 `aspect-ratio` 預留空間，避免載入後的佈局抖動 (CLS)。
+  - Grid / Flex 子項預設 `min-width: auto`，不會縮到比內容窄：內含 `truncate` 文字、寬表格、長標籤或下拉選單時，會把整欄撐出容器（巢狀 grid 也一樣）。子項加 `min-w-0`，或欄寬寫成 `grid-cols-[minmax(0,1fr)]`，單欄的手機版也要寫。
 
 ### 2. 交互與操作體驗
 
