@@ -20,7 +20,7 @@ color: green
 | 類別 | 選型 | 備註 |
 |------|------|------|
 | **語言** | Python 3.11+ | |
-| **Web 框架** | Flask + Flask-RESTX | 內建 Swagger UI，無需額外生成指令 |
+| **Web 框架** | Flask + Flask-RESTX | 內建 Swagger 2.0 與 Swagger UI；契約交付與文件頁依 `backend-api-docs` skill |
 | **ORM** | SQLAlchemy 2.0+ / Flask-SQLAlchemy | |
 | **資料庫遷移** | Flask-Migrate (Alembic) | |
 | **配置** | python-dotenv + Config 類別繼承 | 透過 `APP_ENV` 切換多環境 (dev/uat/prod) |

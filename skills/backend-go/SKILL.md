@@ -12,7 +12,7 @@ color: blue
 - **架構 (Architecture)**：嚴格遵循 **領域驅動設計 (DDD)**。將領域邏輯與基礎設施及介面關注點解耦。
 - **代碼品質 (Code Quality)**：編寫道地的 Go 代碼 (Idiomatic Go/Effective Go)。優先考慮可讀性、簡潔性與顯式的錯誤處理。
 - **配置 (Configuration)**：遵循 Twelve-Factor App 方法論。透過 `viper` 讀取 `.env` 檔案，並支援環境變數覆蓋。
-- **文檔 (Documentation)**：API 優先設計。所有端點都必須使用 Swagger/OpenAPI 註釋進行文檔化。
+- **文檔 (Documentation)**：API 優先設計。所有端點都必須以 swag 註解文檔化，產出 **OpenAPI 3.0** 契約（規範在 `backend-api-docs` skill）。
 
 ## 技術堆疊 (Tech Stack)
 
@@ -27,7 +27,7 @@ color: blue
 | 熱加載 | `air` | 本地開發用 |
 | 認證 | `JWT` | 無狀態認證 |
 | 日誌 | `log/slog` | Go 1.21+ 標準庫，結構化日誌 |
-| API 文檔 | `swaggo/swag` | Swagger 自動生成 |
+| API 文檔 | `swaggo/swag` + `kin-openapi` | swag 產 2.0 中間產物，轉成 OpenAPI 3.0 正本；文件頁 Scalar（見 `backend-api-docs` skill） |
 | 測試 Mock | `testify/mock` | |
 | Redis 測試 | `miniredis/v2` | 單元測試用的 in-memory Redis |
 
@@ -104,9 +104,9 @@ color: blue
         - **禁止反過來**（先開 Transaction 再取 Lock）：會佔用 DB 連線等待鎖、取鎖失敗需無謂 rollback、有死鎖風險。
 4.  **介面層 (Interface Layer)**：在 `internal/interfaces/api` 中建立處理器 (Handlers) 與路由 (Routes)。
     -   *規則*：解析請求，調用應用服務，並使用 `pkg/response` 格式化回應。
-5.  **文檔 (Documentation)**：立即為處理器添加 Swagger 註釋。
-    -   **完整規範請讀取 [SWAGGER.md](references/SWAGGER.md)**：包含 Handler 註釋規範、`@Param` 語法、`@Success` 型別規範、完整範例、Request struct `example` tag 規則。
-    -   在新增或修改任何 Handler 端點前，**必須**先讀取 `references/SWAGGER.md` 並遵循其中所有規則。
+5.  **文檔 (Documentation)**：立即為處理器添加 swag 註解。
+    -   **完整規範在 `backend-api-docs` skill 的 `references/go-swag.md`**（`~/.claude/skills/backend-api-docs/references/go-swag.md`）：Handler 註解規範、`@Param` 語法、`@Success` 型別、`validate:"optional"` / `x-nullable` 在 OpenAPI 3.0 下的意義、Makefile 與轉換工具、文件頁 handler。
+    -   在新增或修改任何 Handler 端點前，**必須**先讀取該檔並遵循其中所有規則。
     -   **生成指令**：`cd {BACKEND_DIR} && make swagger`（修改後必須重新執行）
 6.  **測試 (Testing)**：每次完成應用層 (Application Layer) 的實作後，**必須**執行單元測試並確認全部通過，再回報完成。
     -   執行指令：`cd {BACKEND_DIR} && make test`
@@ -210,6 +210,6 @@ color: blue
 
 | 文件 | 內容 | 何時讀取 |
 |------|------|----------|
-| [references/SWAGGER.md](references/SWAGGER.md) | Swagger/OpenAPI 註釋規範：Handler 註釋格式、`@Param` 語法、`@Success` 型別、Request struct `example` tag、完整範例 | 新增或修改任何 API Handler 前**必讀** |
+| `~/.claude/skills/backend-api-docs/references/go-swag.md` | swag 註解規範與 OpenAPI 3.0 產生流程（已移到 `backend-api-docs` skill；本目錄的 SWAGGER.md 只留指標） | 新增或修改任何 API Handler 前**必讀** |
 | [references/REDIS.md](references/REDIS.md) | Redis 實作規範：連線池配置、Cache-Aside 封裝與使用、分散式鎖封裝與使用、任務隊列封裝與使用、Rate Limiting、Key 命名規範、miniredis 測試範例 | 實作涉及緩存/鎖/隊列的功能前**必讀** |
 | [references/LOGGING.md](references/LOGGING.md) | 日誌規範：slog 初始化配置、輸出目標 (stdout/stderr/file)、格式 (json/text)、級別規範、Request Logger Middleware、多環境策略 | 設定或調整日誌輸出時**必讀** |

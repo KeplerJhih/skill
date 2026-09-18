@@ -3,6 +3,8 @@
 本文件定義了本專案使用 `Flask-RESTX` 撰寫 API 文檔的完整規範。
 當你在 `handler/` 中新增或修改端點時，**必須**遵循以下所有規則。
 
+> Flask-RESTX 內建的是 Swagger UI 與 Swagger 2.0 規格。契約要交給前端、其他開發者或 AI 時，以及文件頁的做法（OpenAPI 3.0 正本、Scalar、登入試打），依 `backend-api-docs` skill；本文件只管註解怎麼寫。
+
 ---
 
 ## 基礎設施前置檢查

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API 文件</title>
+<style>
+  body { margin: 0; font-family: "Noto Sans TC", "PingFang TC", system-ui, sans-serif; }
+  #bar, #login { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px;
+                 border-bottom: 1px solid #dfe3e8; font-size: 14px; color: #3d4a57; }
+  #bar { background: #f7f8fa; }
+  #login { background: #fff; }
+  #bar select, #bar input, #login select, #login input { font: inherit; padding: 4px 8px; border: 1px solid #ccd3db; border-radius: 6px; background: #fff; }
+  #bar input { flex: 1 1 240px; min-width: 200px; max-width: 420px; }
+  #login input { width: 150px; }
+  #bar button, #login button { font: inherit; padding: 4px 12px; border: 1px solid #ccd3db; border-radius: 6px; background: #fff; cursor: pointer; }
+  #apply, #signin { border-color: #1d62a6 !important; background: #1d62a6 !important; color: #fff; }
+  #hint, #auth { color: #6b7785; }
+  #auth.ok { color: #2b7549; }
+  #auth.bad { color: #ad3a2d; }
+  #links { margin-left: auto; display: flex; gap: 12px; }
+  #links a { color: #1d62a6; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <label for="mode">API 伺服器</label>
+  <select id="mode">
+    <option value="auto">自動偵測（目前網址）</option>
+    <option value="manual">自行輸入</option>
+  </select>
+  <input id="url" type="url" placeholder="https://api.example.com" hidden>
+  <button id="apply" hidden>套用</button>
+  <span id="hint"></span>
+  <span id="links"><a id="download" href="#" download="openapi3.json">下載 OpenAPI 3.0 規格</a></span>
+</div>
+<form id="login">
+  <label for="portal">登入</label>
+  <select id="portal"></select>
+  <input id="username" name="username" type="text" placeholder="帳號" autocomplete="username">
+  <input id="password" name="password" type="password" placeholder="密碼" autocomplete="current-password">
+  <button type="submit" id="signin">取得 token</button>
+  <button type="button" id="signout" hidden>登出</button>
+  <span id="auth">尚未登入；登入後 token 會自動帶進下方所有端點</span>
+</form>
+<div id="app"></div>
+<script src="/docs/scalar.standalone.js"></script>
+<script>
+(function () {
+  // ── 依專案調整的地方全部在這裡 ──
+  var CONFIG = {
+    title: 'API 文件',
+    specUrl: '/docs/openapi.json',
+    // 登入入口：path 為登入端點；回應格式不同時改下方 extractToken
+    portals: [
+      { label: '後台（admin）', path: '/admin/auth/login' },
+      { label: '客戶端（customer）', path: '/api/auth/login' }
+    ],
+    // 左側分區：依 tag 前綴比對，最後一組 prefix 留空收剩下的
+    groups: [
+      { name: '後台 /admin', prefix: 'Admin' },
+      { name: '客戶端 /api', prefix: 'Customer' },
+      { name: '共用', prefix: '' }
+    ],
+    // 規格裡的安全機制名稱（swag 預設 BearerAuth，apiKey 形式、header Authorization）
+    securityScheme: 'BearerAuth'
+  };
+  // 從登入回應取出 token 與顯示名稱；回傳 null 表示失敗
+  function extractToken(body) {
+    if (!body || !body.data || !body.data.token) { return null; }
+    var user = body.data.user || {};
+    return { token: body.data.token, who: (user.name || user.username || '') + '（' + (user.role || '') + '）' };
+  }
+  // ── 以下不用改 ──
+
+  var SERVER_KEY = 'apidocs.server';
+  var TOKEN_KEY = 'apidocs.token';
+  var el = function (id) { return document.getElementById(id); };
+  var spec = null;
+  var token = '';
+  var who = '';
+
+  document.title = CONFIG.title;
+  el('download').href = CONFIG.specUrl;
+  CONFIG.portals.forEach(function (p) {
+    var opt = document.createElement('option');
+    opt.value = p.path;
+    opt.textContent = p.label;
+    el('portal').appendChild(opt);
+  });
+
+  // 依 tag 前綴收成分區；順序沿用規格裡 tags 的順序，規格沒宣告的 tag 排最後
+  function tagGroups(s) {
+    var order = (s.tags || []).map(function (t) { return t.name; });
+    var used = {};
+    order.forEach(function (n) { used[n] = true; });
+    Object.keys(s.paths || {}).forEach(function (p) {
+      Object.keys(s.paths[p]).forEach(function (m) {
+        (s.paths[p][m].tags || []).forEach(function (n) { used[n] = true; });
+      });
+    });
+    var rank = function (n) { var i = order.indexOf(n); return i < 0 ? order.length : i; };
+    var names = Object.keys(used).sort(function (a, b) { return rank(a) - rank(b) || a.localeCompare(b); });
+    var groups = CONFIG.groups.map(function (g) { return { name: g.name, prefix: g.prefix, tags: [] }; });
+    names.forEach(function (n) {
+      for (var i = 0; i < groups.length; i++) {
+        if (!groups[i].prefix || n.indexOf(groups[i].prefix) === 0) { groups[i].tags.push(n); return; }
+      }
+    });
+    return groups.filter(function (g) { return g.tags.length; })
+                 .map(function (g) { return { name: g.name, tags: g.tags }; });
+  }
+
+  function chosen() {
+    if (el('mode').value === 'manual') { return el('url').value.trim(); }
+    return location.protocol === 'file:' ? '' : location.origin;
+  }
+
+  function render() {
+    if (!spec) { return; }
+    var copy = JSON.parse(JSON.stringify(spec));
+    copy['x-tagGroups'] = tagGroups(copy);
+    var base = chosen();
+    if (base) { copy.servers = [{ url: base.replace(/\/+$/, '') }]; }
+    el('app').innerHTML = '';
+    var config = {
+      content: copy,
+      agent: { disabled: true },   // Ask AI 會把規格上傳到 Scalar，關閉
+      mcp: { disabled: true },
+      hideModels: true,
+      documentDownloadType: 'json',
+      layout: 'modern',
+      theme: 'default'
+    };
+    if (token) {
+      var schemes = {};
+      schemes[CONFIG.securityScheme] = { name: 'Authorization', in: 'header', value: 'Bearer ' + token };
+      config.authentication = { preferredSecurityScheme: CONFIG.securityScheme, securitySchemes: schemes };
+    }
+    Scalar.createApiReference('#app', config);
+  }
+
+  function sync(rerender) {
+    var manual = el('mode').value === 'manual';
+    el('url').hidden = !manual;
+    el('apply').hidden = !manual;
+    el('hint').textContent = manual ? '只存在這台瀏覽器；指到其他環境時，登入與試打會受該站的 CORS 設定影響'
+                                    : '目前：' + location.origin + '（同網域，試打可直接送出）';
+    try { localStorage.setItem(SERVER_KEY, JSON.stringify({ mode: el('mode').value, url: el('url').value })); } catch (e) { /* 無痕視窗 */ }
+    if (rerender) { render(); }
+  }
+
+  try {
+    var saved = JSON.parse(localStorage.getItem(SERVER_KEY) || '{}');
+    if (saved.mode === 'manual') { el('mode').value = 'manual'; }
+    if (saved.url) { el('url').value = saved.url; }
+  } catch (e) { /* 忽略壞掉的設定 */ }
+
+  el('mode').addEventListener('change', function () { sync(true); });
+  el('apply').addEventListener('click', function () { sync(true); });
+  el('url').addEventListener('keydown', function (e) { if (e.key === 'Enter') { sync(true); } });
+  sync(false);
+
+  // 登入：token 只存在分頁（sessionStorage），不存密碼
+  function showAuth(text, cls) {
+    el('auth').textContent = text;
+    el('auth').className = cls || '';
+    el('signout').hidden = !token;
+  }
+
+  try {
+    var savedToken = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || '{}');
+    token = savedToken.token || '';
+    who = savedToken.who || '';
+  } catch (e) { /* 忽略 */ }
+  showAuth(token ? '已登入：' + who + '（token 已帶入下方端點）' : '尚未登入；登入後 token 會自動帶進下方所有端點', token ? 'ok' : '');
+
+  el('login').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var base = chosen() || location.origin;
+    showAuth('登入中…');
+    fetch(base.replace(/\/+$/, '') + el('portal').value, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: el('username').value.trim(), password: el('password').value })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, status: r.status, body: body }; });
+    }).then(function (res) {
+      var got = res.ok ? extractToken(res.body) : null;
+      if (!got) { throw new Error((res.body && res.body.message) || ('HTTP ' + res.status)); }
+      token = got.token;
+      who = got.who;
+      el('password').value = '';
+      try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ token: token, who: who })); } catch (e2) { /* 無痕視窗 */ }
+      showAuth('已登入：' + who + '（token 已帶入下方端點）', 'ok');
+      render();
+    }).catch(function (err) {
+      showAuth('登入失敗：' + err.message, 'bad');
+    });
+  });
+
+  el('signout').addEventListener('click', function () {
+    token = '';
+    who = '';
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* 忽略 */ }
+    showAuth('已登出', '');
+    render();
+  });
+
+  fetch(CONFIG.specUrl, { headers: { Accept: 'application/json' } })
+    .then(function (r) { return r.json(); })
+    .then(function (s) { spec = s; render(); })
+    .catch(function (e) { el('app').textContent = '讀不到 API 規格（' + CONFIG.specUrl + '）：' + e.message; });
+})();
+</script>
+</body>
+</html>
