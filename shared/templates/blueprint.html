@@ -1,0 +1,227 @@
+<!--
+  HTML 藍圖模板（~/.claude/shared/templates/blueprint.html）
+  用法：複製到 session 暫存目錄 → 填入 [方括號] 佔位 → 刪掉用不到的 section → 以 Artifact 發佈（favicon 一個 emoji，description 一句話）。
+  規則：<title> 是名稱不是摘要（2–4 個詞）；決策卡每題 2–4 個選項、建議的加 .is-rec 與「建議」pill；文末「回 Y 全照建議」收斂。
+  不要在模板裡留任何專案名稱；本檔可在深色 / 淺色、手機寬度下閱讀。
+-->
+<title>[藍圖名稱]</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Montserrat:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --ground: #f4f6f9; --surface: #ffffff; --sunken: #edf1f5; --ink: #17202b; --muted: #586576; --line: #dbe2e9;
+    --accent: #1d62a6; --accent-ink: #ffffff; --accent-soft: #e2edf8;
+    --good: #2b7549; --good-soft: #e1f1e7; --warn: #8f5c0c; --warn-soft: #fbf0d8; --bad: #ad3a2d; --bad-soft: #f7e3df;
+    --lock: #5b4a8b; --lock-soft: #ebe6f6;
+    --shadow: 0 1px 2px rgb(23 32 43 / 6%), 0 4px 16px rgb(23 32 43 / 5%);
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    --display: "Montserrat", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e131a; --surface: #151c25; --sunken: #1b2430; --ink: #e3e9ef; --muted: #97a3b1; --line: #2a3542;
+      --accent: #6ba9e9; --accent-ink: #0e131a; --accent-soft: #15304b; --good: #6fc395; --good-soft: #163426;
+      --warn: #e2ab55; --warn-soft: #382b12; --bad: #ef8b7e; --bad-soft: #3c1d19; --lock: #b9a6ee; --lock-soft: #2a2340;
+      --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 16px rgb(0 0 0 / 25%);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e131a; --surface: #151c25; --sunken: #1b2430; --ink: #e3e9ef; --muted: #97a3b1; --line: #2a3542;
+    --accent: #6ba9e9; --accent-ink: #0e131a; --accent-soft: #15304b; --good: #6fc395; --good-soft: #163426;
+    --warn: #e2ab55; --warn-soft: #382b12; --bad: #ef8b7e; --bad-soft: #3c1d19; --lock: #b9a6ee; --lock-soft: #2a2340;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 16px rgb(0 0 0 / 25%);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.75; padding-inline: 20px; }
+  @media (max-width: 480px) { body { padding-inline: 16px; } }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--sunken); border: 1px solid var(--line); border-radius: 5px; padding: 0.05em 0.35em; overflow-wrap: anywhere; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.3; margin: 0; }
+  h2 { font-size: 1.45rem; } h3 { font-size: 1.05rem; }
+  p { margin: 0; } ul, ol { margin: 0; padding-left: 1.3em; } li + li { margin-top: 0.3em; } b { font-weight: 700; }
+  .page { max-width: 1140px; margin: 0 auto; padding-block: 36px 72px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  @media (min-width: 1060px) { .page { grid-template-columns: 180px minmax(0, 1fr); gap: 52px; } }
+  .toc { font-size: 0.9rem; } .toc-inner { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .toc-label { width: 100%; font-size: 0.72rem; letter-spacing: 0.12em; color: var(--muted); font-weight: 500; }
+  .toc a { color: var(--muted); text-decoration: none; } .toc a:hover { color: var(--accent); }
+  @media (min-width: 1060px) {
+    .toc-inner { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 28px); flex-direction: column; gap: 8px; }
+    .toc a { border-left: 2px solid var(--line); padding-left: 12px; display: block; line-height: 1.4; }
+    .toc a:hover { border-left-color: var(--accent); }
+  }
+  main { display: flex; flex-direction: column; gap: 56px; min-width: 0; }
+  section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 24px; min-width: 0; }
+  .section-head { display: flex; flex-direction: column; gap: 6px; } .section-head p { color: var(--muted); max-width: 72ch; }
+  .masthead { display: flex; flex-direction: column; gap: 16px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+  .eyebrow { font-size: 0.76rem; letter-spacing: 0.14em; color: var(--accent); font-weight: 700; }
+  h1 { font-size: clamp(1.8rem, 1.2rem + 2.4vw, 2.6rem); letter-spacing: -0.01em; }
+  .lede { font-size: 1.08rem; color: var(--muted); max-width: 66ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.86rem; color: var(--muted); } .meta b { color: var(--ink); font-weight: 500; }
+  .pill { display: inline-flex; align-items: center; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; padding: 1px 8px; border-radius: 999px; white-space: nowrap; line-height: 1.7; }
+  .pill.rec { background: var(--good-soft); color: var(--good); } .pill.new { background: var(--accent-soft); color: var(--accent); }
+  .pill.keep { background: var(--sunken); color: var(--muted); } .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.lock { background: var(--lock-soft); color: var(--lock); } .pill.no { background: var(--bad-soft); color: var(--bad); }
+  .notice { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+  .notice h3 { color: var(--warn); } .notice p, .notice li { font-size: 0.95rem; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  @media (min-width: 860px) { .two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .panel p, .panel li { font-size: 0.92rem; } .panel h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .muted { color: var(--muted); }
+  .decisions { display: flex; flex-direction: column; gap: 14px; }
+  .group-label { font-size: 0.78rem; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; margin-top: 6px; }
+  .decision { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .decision-q { display: flex; gap: 10px; align-items: baseline; }
+  .decision-q .no { font-family: var(--display); font-weight: 700; color: var(--accent); font-size: 1rem; min-width: 1.9em; }
+  .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+  .option { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; background: var(--ground); }
+  .option.is-rec { border-color: var(--good); background: var(--good-soft); }
+  .option-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-weight: 700; }
+  .option p { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
+  .reply-hint { background: var(--accent-soft); border-radius: 10px; padding: 12px 16px; font-size: 0.95rem; }
+  .flow { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; counter-reset: step; }
+  .flow li { counter-increment: step; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 12px 48px; position: relative; }
+  .flow li::before { content: counter(step); position: absolute; left: 13px; top: 13px; width: 25px; height: 25px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.8rem; }
+  .flow li.guard { border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); } .flow li.guard::before { background: var(--bad); }
+  .flow b { display: block; line-height: 1.45; } .flow span { color: var(--muted); font-size: 0.86rem; line-height: 1.55; display: block; margin-top: 3px; }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; min-width: 640px; }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); line-height: 1.6; }
+  tr:last-child td { border-bottom: 0; } th { background: var(--sunken); font-size: 0.82rem; letter-spacing: 0.03em; white-space: nowrap; }
+  td:first-child { font-weight: 500; } td.now { color: var(--muted); }
+  .tree { font-family: var(--mono); font-size: 0.82rem; line-height: 1.65; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; overflow-x: auto; white-space: pre; margin: 0; }
+  .tree .c { color: var(--muted); } .tree .n { color: var(--accent); font-weight: 500; }
+  .steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: s; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 0; }
+  .steps li::before { content: counter(s); font-family: var(--display); font-weight: 700; color: var(--accent-ink); background: var(--accent); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 0.86rem; margin-top: 2px; }
+  .steps li.gate { border-color: var(--warn); } .steps li.gate::before { background: var(--warn); }
+  .steps b { display: block; } .steps span { color: var(--muted); font-size: 0.9rem; }
+  footer { color: var(--muted); font-size: 0.84rem; border-top: 1px solid var(--line); padding-top: 18px; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="page">
+  <nav class="toc" aria-label="目錄">
+    <div class="toc-inner">
+      <span class="toc-label">目錄</span>
+      <a href="#now">現況</a>
+      <a href="#decide">要你決定</a>
+      <a href="#design">怎麼做</a>
+      <a href="#changes">會改哪些地方</a>
+      <a href="#verify">驗證</a>
+      <a href="#steps">執行步驟</a>
+    </div>
+  </nav>
+
+  <main>
+    <header class="masthead">
+      <span class="eyebrow">[專案]・任務藍圖・待你確認</span>
+      <h1>[一句話講清楚要做什麼]</h1>
+      <p class="lede">[兩三句：背景、為什麼現在做、做完使用者會感受到什麼]</p>
+      <div class="meta">
+        <span>任務類型 <b>[Code / Config]</b></span>
+        <span>涉及 <b>[子專案]</b></span>
+        <span>資料表 <b>[migration 000N，只加欄位 / 不動]</b></span>
+        <span>新依賴 <b>[名稱（授權）/ 無]</b></span>
+        <span>新端點 <b>[有 / 無]</b></span>
+      </div>
+    </header>
+
+    <!-- 現況：用資料回答誰 / 何時 / 多常；Bug 類寫「已重現」即可 -->
+    <section id="now" aria-labelledby="now-h">
+      <div class="notice">
+        <h3 id="now-h">現況（用資料回答，不用推測）</h3>
+        <ul>
+          <li><b>誰會遇到：</b>[使用者 / 裝置 / 入口]</li>
+          <li><b>什麼情況下：</b>[實機行為 / 資料庫實際數字]</li>
+          <li><b>多常：</b>[次數 / 比例；查不到就寫「查不到，假設 …」]</li>
+          <li><b>資源上限：</b>[會吃資源時，對照部署 limits；不相關就刪這行]</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="decide" aria-labelledby="decide-h">
+      <div class="section-head">
+        <h2 id="decide-h">要你決定的 [N] 件事</h2>
+        <p>綠框是建議。後面的章節都照建議寫；選了其他方案，我會先更新藍圖再動手。</p>
+      </div>
+      <div class="decisions">
+        <span class="group-label">[分組標籤，只有一組就刪]</span>
+        <article class="decision">
+          <div class="decision-q"><span class="no">1</span><h3>[決策問題]</h3></div>
+          <div class="options">
+            <div class="option is-rec">
+              <div class="option-title">[選項 A] <span class="pill rec">建議</span></div>
+              <p>[選它的後果 / 取捨，一兩句]</p>
+            </div>
+            <div class="option">
+              <div class="option-title">[選項 B]</div>
+              <p>[選它的後果 / 取捨]</p>
+            </div>
+          </div>
+        </article>
+        <p class="reply-hint">回 <b>Y</b> 表示全部照建議；要改就像這樣回：「2 選 B，其他照建議」。</p>
+      </div>
+    </section>
+
+    <section id="design" aria-labelledby="design-h">
+      <div class="section-head">
+        <h2 id="design-h">怎麼做</h2>
+        <p>[一句話說明整體做法]</p>
+      </div>
+      <!-- 流程：.guard 標記守門步驟（檢查 / 拒絕 / 排隊） -->
+      <ol class="flow">
+        <li><b>[步驟]</b><span>[說明]</span></li>
+        <li class="guard"><b>[守門步驟]</b><span>[拒絕條件]</span></li>
+        <li><b>[步驟]</b><span>[說明]</span></li>
+      </ol>
+      <div class="two">
+        <div class="panel">
+          <h3>[面向一] <span class="pill new">新增</span></h3>
+          <ul><li>[要點]</li></ul>
+        </div>
+        <div class="panel">
+          <h3>風險 <span class="pill warn">要你知道</span></h3>
+          <ul><li>[風險與對策]</li></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="changes" aria-labelledby="changes-h">
+      <div class="section-head"><h2 id="changes-h">會改哪些地方</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>項目</th><th>現在</th><th>之後</th></tr></thead>
+          <tbody>
+            <tr><td>[端點 / 表 / 畫面]</td><td class="now">[現況]</td><td>[變更]</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="verify" aria-labelledby="verify-h">
+      <div class="section-head"><h2 id="verify-h">驗證</h2></div>
+      <div class="two">
+        <div class="panel"><h3>單元測試</h3><ul><li>[案例]</li></ul></div>
+        <div class="panel"><h3>端到端</h3><ul><li>[隔離環境、假上游、資料還原]</li></ul></div>
+      </div>
+    </section>
+
+    <section id="steps" aria-labelledby="steps-h">
+      <div class="section-head">
+        <h2 id="steps-h">執行步驟</h2>
+        <p>[有實測關卡時：第 1 步是關卡，不達標會先停下來回報]</p>
+      </div>
+      <ol class="steps">
+        <li class="gate"><div><b>[實測關卡]</b><span>[量什麼、門檻是多少、不過怎麼辦]</span></div></li>
+        <li><div><b>[步驟]</b><span>[內容]</span></div></li>
+        <li><div><b>文件</b><span>[決議編號、CLAUDE.md、交接文件]</span></div></li>
+      </ol>
+    </section>
+
+    <footer>[專案]・[藍圖名稱]。本頁只是規劃，尚未修改任何程式碼。</footer>
+  </main>
+</div>
