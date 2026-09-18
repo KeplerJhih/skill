@@ -88,3 +88,10 @@ color: orange
 -   **清理環境**：測試結束後使用 `close_page` 關閉頁面。
 -   **截圖佐證**：關鍵步驟或錯誤發生時，使用 `take_screenshot` 截圖並存至 `tmp/` 目錄。
 -   **上傳測試檔**：瀏覽器工具的上傳可能只允許本工作階段可讀的檔案。遇到限制時，把測試檔複製到專案內被 git 忽略、且開發伺服器會提供的目錄（例如前端的 `tmp/`），在頁面內 `fetch` 取得後以 `DataTransfer` 放進 `<input type="file">` 並觸發 `change`；測試完刪除該檔。
+
+## 參考資料索引
+
+| 檔案 | 內容 | 何時讀 |
+|---|---|---|
+| [references/isolated-env.md](references/isolated-env.md) | 另起後端實例（獨立埠與密鑰、自鑄權杖）、假外部服務與驗證點、前端 Vite 覆寫、資料庫快照與只刪 QA 列的還原 | 使用者的服務正在跑、資料庫有真實資料、或功能會呼叫外部服務時**必讀** |
+| [references/browser-pitfalls.md](references/browser-pitfalls.md) | 手機寬度用 iframe 量、打字前確認焦點、截圖時機、工具會遮蔽敏感 key、`file://` 開不了、快取命中 | 瀏覽器操作卡住或結果與預期不符時 |
